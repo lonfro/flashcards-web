@@ -11,14 +11,10 @@ export interface WinUIDividerJson {
   $type: 'Divider';
   Name: string;
   Children: (WinUIDividerJson | WinUICardJson)[];
-  TotalChildren?: number;
-  IsExpanded?: boolean;
 }
 
 export interface LibraryTreeJson {
   Contents: (WinUIDividerJson | WinUICardJson)[];
-  contents?: (WinUIDividerJson | WinUICardJson)[];
-  Library?: (WinUIDividerJson | WinUICardJson)[];
 }
 
 export interface WinUISyncMetadataJson {
@@ -28,7 +24,7 @@ export interface WinUISyncMetadataJson {
 
 /**
  * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
- * Includes both PascalCase and camelCase properties for 100% C# System.Text.Json compatibility.
+ * Matches C# JsonSerializer output 1:1 without extra properties so dirtyHash === localHash === remoteHash.
  */
 export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | null): string {
   const rootNodes = targetDividerId
@@ -44,7 +40,7 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
         $type: 'Card',
         Front: node.card.front || '',
         Back: node.card.back || '',
-        Weight: typeof node.card.weight === 'number' ? node.card.weight : 20.0,
+        Weight: typeof node.card.weight === 'number' ? Math.round(node.card.weight * 10) / 10 : 20.0,
       };
     }
 
@@ -54,23 +50,10 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
         .map((child) => convertNode(child.id))
         .filter((child): child is WinUIDividerJson | WinUICardJson => child !== null);
 
-      const countCards = (items: (WinUIDividerJson | WinUICardJson)[]): number => {
-        let count = 0;
-        for (const item of items) {
-          if (item.$type === 'Card') count += 1;
-          else if (item.$type === 'Divider' && item.Children) {
-            count += countCards(item.Children);
-          }
-        }
-        return count;
-      };
-
       return {
         $type: 'Divider',
         Name: node.name || 'Divider',
         Children: mappedChildren,
-        TotalChildren: countCards(mappedChildren),
-        IsExpanded: false,
       };
     }
 
@@ -81,21 +64,13 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
     .map((root) => convertNode(root.id))
     .filter((x): x is WinUIDividerJson | WinUICardJson => x !== null);
 
-  // If exporting a single divider, export as raw array; if full library sync, wrap in LibraryTree schema
+  // If exporting a single divider, export as raw array; if full library sync, wrap in 1:1 WinUI LibraryTree schema
   if (targetDividerId) {
     return JSON.stringify(exportedTree, null, 2);
   }
 
-  // Wrap in both "Contents", "contents", and "Library" for 100% C# System.Text.Json deserialization compatibility
-  return JSON.stringify(
-    {
-      Contents: exportedTree,
-      contents: exportedTree,
-      Library: exportedTree,
-    },
-    null,
-    2
-  );
+  // 1:1 exact WinUI LibraryTree JSON schema output matching C# JsonSerializer.Serialize
+  return JSON.stringify({ Contents: exportedTree }, null, 2);
 }
 
 /**
@@ -175,12 +150,14 @@ export function importFromWinUIJson(
 }
 
 /**
- * Calculates simple SHA-256 hash string for sync.json metadata matching WinUI C# SyncMetadataService
+ * Calculates SHA-256 hash string for sync.json metadata 1:1 matching WinUI C# SyncMetadataService
  */
 export async function calculateJsonHash(jsonStr: string): Promise<string> {
+  // Normalize line endings (\r\n -> \n) for deterministic SHA-256 computation
+  const normalizedStr = jsonStr.replace(/\r\n/g, '\n');
   if (typeof crypto !== 'undefined' && crypto.subtle) {
     const encoder = new TextEncoder();
-    const data = encoder.encode(jsonStr);
+    const data = encoder.encode(normalizedStr);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
