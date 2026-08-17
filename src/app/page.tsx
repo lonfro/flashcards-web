@@ -280,7 +280,7 @@ export default function HomePage() {
     }
   };
 
-  // Google Drive Authentication Handlers
+  // Google Drive Authentication Handlers (First-Time Sign-In Safe)
   const handleConnectDrive = (clientId: string) => {
     setSyncState('syncing');
     requestGoogleDriveToken(
@@ -288,8 +288,14 @@ export default function HomePage() {
       (token) => {
         setAccessToken(token);
         setSyncState('syncing');
-        uploadToGoogleDrive(token, nodes).then((res) => {
-          if (res.success) {
+
+        // Treat local state prior to sign-in with oldest timestamp possible:
+        // Check and download existing remote library from Google Drive first so cloud contents aren't overwritten by local default cards!
+        downloadFromGoogleDrive(token, nodes, true).then((downloadRes) => {
+          if (downloadRes.success && downloadRes.nodes && downloadRes.nodes.length > 0) {
+            // Remote cloud library exists! Restore remote decks to local state
+            setNodes(downloadRes.nodes);
+            saveStoredNodes(downloadRes.nodes);
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             setLastSyncTime(timeStr);
             try {
@@ -297,7 +303,19 @@ export default function HomePage() {
             } catch (e) {}
             setSyncState('synced');
           } else {
-            setSyncState('error');
+            // No remote cloud library exists yet! Upload current local library to Google Drive
+            uploadToGoogleDrive(token, nodes).then((uploadRes) => {
+              if (uploadRes.success) {
+                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setLastSyncTime(timeStr);
+                try {
+                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
+                } catch (e) {}
+                setSyncState('synced');
+              } else {
+                setSyncState('error');
+              }
+            });
           }
         });
       },
