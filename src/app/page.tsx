@@ -18,7 +18,7 @@ import { XamlSettingsPage } from '../components/XamlSettingsPage';
 import { XamlGridSplitter } from '../components/XamlGridSplitter';
 
 import { getStoredTheme, applyTheme } from '../utils/themePresets';
-import { exportToWinUIJson, importFromWinUIJson } from '../utils/winuiJsonConverter';
+import { exportToWinUIJson, importFromWinUIJson, calculateJsonHash } from '../utils/winuiJsonConverter';
 import {
   SyncState,
   STORAGE_LAST_SYNC_KEY,
@@ -27,6 +27,8 @@ import {
   requestGoogleDriveToken,
   uploadToGoogleDrive,
   downloadFromGoogleDrive,
+  performSmartSync,
+  saveStoredLocalMetadata,
 } from '../utils/googleDriveSync';
 
 import {
@@ -116,16 +118,18 @@ export default function HomePage() {
       console.error(e);
     }
 
-    // Check Google Drive token for initial load auto-sync
+    // Check Google Drive token for initial load smart sync (1:1 WinUI SyncService algorithm)
     const token = getStoredAccessToken();
     if (token) {
       setAccessToken(token);
       setSyncState('syncing');
 
-      downloadFromGoogleDrive(token, data, true).then((res) => {
-        if (res.success && res.nodes && res.nodes.length > 0) {
-          setNodes(res.nodes);
-          saveStoredNodes(res.nodes);
+      performSmartSync(token, data).then((res) => {
+        if (res.success) {
+          if (res.nodes) {
+            setNodes(res.nodes);
+            saveStoredNodes(res.nodes);
+          }
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
           try {
@@ -159,16 +163,18 @@ export default function HomePage() {
     }
   }, [nodes, cardSettings]);
 
-  // Background Auto-Refresh (Polling Loop) for remote desktop changes
+  // Background Auto-Refresh (Polling Loop using performSmartSync 1:1 with WinUI SyncService)
   useEffect(() => {
     if (!autoRefreshEnabled || !accessToken) return;
 
     const intervalMs = autoRefreshInterval * 1000;
     const intervalId = setInterval(() => {
-      downloadFromGoogleDrive(accessToken, nodes, true).then((res) => {
-        if (res.success && res.nodes) {
-          setNodes(res.nodes);
-          saveStoredNodes(res.nodes);
+      performSmartSync(accessToken, nodes).then((res) => {
+        if (res.success) {
+          if (res.nodes) {
+            setNodes(res.nodes);
+            saveStoredNodes(res.nodes);
+          }
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
           try {
@@ -248,10 +254,16 @@ export default function HomePage() {
     }
   };
 
-  // Central Node Mutation Handler with Google Drive Auto-Sync
+  // Central Node Mutation Handler with 1:1 WinUI performSmartSync
   const handleUpdateNodes = (newNodes: NodeData[]) => {
     setNodes(newNodes);
     saveStoredNodes(newNodes);
+
+    // Save updated local SyncMetadata with current timestamp for smart sync comparison
+    const jsonStr = exportToWinUIJson(newNodes);
+    calculateJsonHash(jsonStr).then((hash) => {
+      saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
+    });
 
     if (accessToken) {
       setSyncState('syncing');
@@ -261,8 +273,12 @@ export default function HomePage() {
       }
 
       syncTimeoutRef.current = setTimeout(() => {
-        uploadToGoogleDrive(accessToken, newNodes).then((res) => {
+        performSmartSync(accessToken, newNodes).then((res) => {
           if (res.success) {
+            if (res.nodes) {
+              setNodes(res.nodes);
+              saveStoredNodes(res.nodes);
+            }
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             setLastSyncTime(timeStr);
             try {
@@ -280,7 +296,7 @@ export default function HomePage() {
     }
   };
 
-  // Google Drive Authentication Handlers (First-Time Sign-In Safe)
+  // Google Drive Authentication Handlers (1:1 WinUI Smart Sync on Connect)
   const handleConnectDrive = (clientId: string) => {
     setSyncState('syncing');
     requestGoogleDriveToken(
@@ -289,13 +305,12 @@ export default function HomePage() {
         setAccessToken(token);
         setSyncState('syncing');
 
-        // Treat local state prior to sign-in with oldest timestamp possible:
-        // Check and download existing remote library from Google Drive first so cloud contents aren't overwritten by local default cards!
-        downloadFromGoogleDrive(token, nodes, true).then((downloadRes) => {
-          if (downloadRes.success && downloadRes.nodes && downloadRes.nodes.length > 0) {
-            // Remote cloud library exists! Restore remote decks to local state
-            setNodes(downloadRes.nodes);
-            saveStoredNodes(downloadRes.nodes);
+        performSmartSync(token, nodes).then((res) => {
+          if (res.success) {
+            if (res.nodes) {
+              setNodes(res.nodes);
+              saveStoredNodes(res.nodes);
+            }
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             setLastSyncTime(timeStr);
             try {
@@ -303,19 +318,7 @@ export default function HomePage() {
             } catch (e) {}
             setSyncState('synced');
           } else {
-            // No remote cloud library exists yet! Upload current local library to Google Drive
-            uploadToGoogleDrive(token, nodes).then((uploadRes) => {
-              if (uploadRes.success) {
-                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                setLastSyncTime(timeStr);
-                try {
-                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-                } catch (e) {}
-                setSyncState('synced');
-              } else {
-                setSyncState('error');
-              }
-            });
+            setSyncState('error');
           }
         });
       },
@@ -372,34 +375,29 @@ export default function HomePage() {
     });
   };
 
+  // Full Manual Sync Trigger on TitleBar Sync Badge Click (1:1 WinUI Smart Sync)
   const handleFullManualSync = () => {
     if (!accessToken) return;
     setSyncState('syncing');
 
-    uploadToGoogleDrive(accessToken, nodes).then((uploadRes) => {
-      if (uploadRes.isAuthError) {
+    performSmartSync(accessToken, nodes).then((res) => {
+      if (res.success) {
+        if (res.nodes) {
+          setNodes(res.nodes);
+          saveStoredNodes(res.nodes);
+        }
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastSyncTime(timeStr);
+        try {
+          localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
+        } catch (e) {}
+        setSyncState('synced');
+      } else if (res.isAuthError) {
         setAccessToken(null);
         setSyncState('unauthenticated');
-        return;
+      } else {
+        setSyncState('error');
       }
-
-      downloadFromGoogleDrive(accessToken, nodes, true).then((downloadRes) => {
-        if (downloadRes.success && downloadRes.nodes) {
-          setNodes(downloadRes.nodes);
-          saveStoredNodes(downloadRes.nodes);
-          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setLastSyncTime(timeStr);
-          try {
-            localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-          } catch (e) {}
-          setSyncState('synced');
-        } else if (downloadRes.isAuthError) {
-          setAccessToken(null);
-          setSyncState('unauthenticated');
-        } else {
-          setSyncState('synced');
-        }
-      });
     });
   };
 
