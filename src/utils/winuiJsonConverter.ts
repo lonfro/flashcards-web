@@ -15,8 +15,8 @@ export interface WinUIDividerJson {
   IsExpanded?: boolean;
 }
 
-export interface WinUISyncFileJson {
-  Library: (WinUIDividerJson | WinUICardJson)[];
+export interface LibraryTreeJson {
+  Contents: (WinUIDividerJson | WinUICardJson)[];
 }
 
 export interface WinUISyncMetadataJson {
@@ -25,7 +25,7 @@ export interface WinUISyncMetadataJson {
 }
 
 /**
- * Converts internal NodeData[] structure into 1:1 WinUI C# SyncFile JSON format ({ "Library": [...] }).
+ * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
  */
 export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | null): string {
   const rootNodes = targetDividerId
@@ -78,17 +78,17 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
     .map((root) => convertNode(root.id))
     .filter((x): x is WinUIDividerJson | WinUICardJson => x !== null);
 
-  // If exporting a single divider, export as raw array; if full library sync, wrap in { "Library": [...] }
+  // If exporting a single divider, export as raw array; if full library sync, wrap in { "Contents": [...] } (1:1 WinUI LibraryTree)
   if (targetDividerId) {
     return JSON.stringify(exportedTree, null, 2);
   }
 
-  return JSON.stringify({ Library: exportedTree }, null, 2);
+  return JSON.stringify({ Contents: exportedTree }, null, 2);
 }
 
 /**
  * Imports 1:1 WinUI C# JSON format into internal NodeData[] structure.
- * Supports { "Library": [...] }, raw array [...], or single object.
+ * Supports LibraryTree ({ "Contents": [...] }), legacy SyncFile ({ "Library": [...] }), raw array [...], or single object.
  */
 export function importFromWinUIJson(
   jsonData: any,
@@ -118,7 +118,7 @@ export function importFromWinUIJson(
           nodeId,
           front: item.Front || '',
           back: item.Back || '',
-          weight: typeof item.Weight === 'number' ? item.Weight : 1.0,
+          weight: typeof item.Weight === 'number' ? item.Weight : 20.0,
           easeFactor: 2.5,
           interval: 1,
           reviewCount: 0,
@@ -146,7 +146,7 @@ export function importFromWinUIJson(
     }
   };
 
-  const payload = jsonData?.Library || jsonData?.library || jsonData;
+  const payload = jsonData?.Contents || jsonData?.contents || jsonData?.Library || jsonData?.library || jsonData;
 
   if (Array.isArray(payload)) {
     payload.forEach((item) => processItem(item, targetParentId));
