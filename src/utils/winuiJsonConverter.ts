@@ -24,9 +24,13 @@ export interface WinUISyncMetadataJson {
 
 /**
  * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
- * Matches C# JsonSerializer output 1:1 without extra properties so dirtyHash === localHash === remoteHash.
+ * Supports optional `pretty` parameter (defaults to true). Use pretty=false for 1:1 C# minified ComputeHash SHA-256 matching.
  */
-export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | null): string {
+export function exportToWinUIJson(
+  nodes: NodeData[],
+  targetDividerId?: string | null,
+  pretty: boolean = true
+): string {
   const rootNodes = targetDividerId
     ? nodes.filter((n) => n.id === targetDividerId)
     : nodes.filter((n) => !n.parentId || n.parentId === 'root');
@@ -64,13 +68,11 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
     .map((root) => convertNode(root.id))
     .filter((x): x is WinUIDividerJson | WinUICardJson => x !== null);
 
-  // If exporting a single divider, export as raw array; if full library sync, wrap in 1:1 WinUI LibraryTree schema
   if (targetDividerId) {
-    return JSON.stringify(exportedTree, null, 2);
+    return JSON.stringify(exportedTree, null, pretty ? 2 : undefined);
   }
 
-  // 1:1 exact WinUI LibraryTree JSON schema output matching C# JsonSerializer.Serialize
-  return JSON.stringify({ Contents: exportedTree }, null, 2);
+  return JSON.stringify({ Contents: exportedTree }, null, pretty ? 2 : undefined);
 }
 
 /**
@@ -150,10 +152,9 @@ export function importFromWinUIJson(
 }
 
 /**
- * Calculates SHA-256 hash string for sync.json metadata 1:1 matching WinUI C# SyncMetadataService
+ * Calculates SHA-256 hash string for sync.json metadata 1:1 matching WinUI C# SyncMetadataService / ComputeHash
  */
 export async function calculateJsonHash(jsonStr: string): Promise<string> {
-  // Normalize line endings (\r\n -> \n) for deterministic SHA-256 computation
   const normalizedStr = jsonStr.replace(/\r\n/g, '\n');
   if (typeof crypto !== 'undefined' && crypto.subtle) {
     const encoder = new TextEncoder();
