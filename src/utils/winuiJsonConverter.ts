@@ -17,6 +17,8 @@ export interface WinUIDividerJson {
 
 export interface LibraryTreeJson {
   Contents: (WinUIDividerJson | WinUICardJson)[];
+  contents?: (WinUIDividerJson | WinUICardJson)[];
+  Library?: (WinUIDividerJson | WinUICardJson)[];
 }
 
 export interface WinUISyncMetadataJson {
@@ -26,11 +28,12 @@ export interface WinUISyncMetadataJson {
 
 /**
  * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
+ * Includes both PascalCase and camelCase properties for 100% C# System.Text.Json compatibility.
  */
 export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | null): string {
   const rootNodes = targetDividerId
     ? nodes.filter((n) => n.id === targetDividerId)
-    : nodes.filter((n) => n.parentId === null);
+    : nodes.filter((n) => !n.parentId || n.parentId === 'root');
 
   const convertNode = (nodeId: string): WinUIDividerJson | WinUICardJson | null => {
     const node = nodes.find((n) => n.id === nodeId);
@@ -39,9 +42,9 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
     if (node.type === 'card' && node.card) {
       return {
         $type: 'Card',
-        Front: node.card.front,
-        Back: node.card.back,
-        Weight: node.card.weight,
+        Front: node.card.front || '',
+        Back: node.card.back || '',
+        Weight: typeof node.card.weight === 'number' ? node.card.weight : 20.0,
       };
     }
 
@@ -64,7 +67,7 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
 
       return {
         $type: 'Divider',
-        Name: node.name,
+        Name: node.name || 'Divider',
         Children: mappedChildren,
         TotalChildren: countCards(mappedChildren),
         IsExpanded: false,
@@ -78,12 +81,21 @@ export function exportToWinUIJson(nodes: NodeData[], targetDividerId?: string | 
     .map((root) => convertNode(root.id))
     .filter((x): x is WinUIDividerJson | WinUICardJson => x !== null);
 
-  // If exporting a single divider, export as raw array; if full library sync, wrap in { "Contents": [...] } (1:1 WinUI LibraryTree)
+  // If exporting a single divider, export as raw array; if full library sync, wrap in LibraryTree schema
   if (targetDividerId) {
     return JSON.stringify(exportedTree, null, 2);
   }
 
-  return JSON.stringify({ Contents: exportedTree }, null, 2);
+  // Wrap in both "Contents", "contents", and "Library" for 100% C# System.Text.Json deserialization compatibility
+  return JSON.stringify(
+    {
+      Contents: exportedTree,
+      contents: exportedTree,
+      Library: exportedTree,
+    },
+    null,
+    2
+  );
 }
 
 /**
@@ -146,7 +158,12 @@ export function importFromWinUIJson(
     }
   };
 
-  const payload = jsonData?.Contents || jsonData?.contents || jsonData?.Library || jsonData?.library || jsonData;
+  const payload =
+    jsonData?.Contents ||
+    jsonData?.contents ||
+    jsonData?.Library ||
+    jsonData?.library ||
+    jsonData;
 
   if (Array.isArray(payload)) {
     payload.forEach((item) => processItem(item, targetParentId));
