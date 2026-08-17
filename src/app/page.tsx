@@ -298,8 +298,8 @@ export default function HomePage() {
     saveStoredNodes(newNodes);
 
     // Save updated local SyncMetadata with current timestamp for smart sync comparison
-    const jsonStr = exportToWinUIJson(newNodes);
-    calculateJsonHash(jsonStr).then((hash) => {
+    const minifiedJson = exportToWinUIJson(newNodes, null, false);
+    calculateJsonHash(minifiedJson).then((hash) => {
       saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
     });
 
