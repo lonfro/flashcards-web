@@ -107,15 +107,21 @@ export function saveStoredLocalMetadata(meta: WinUISyncMetadata): void {
 export function requestGoogleDriveToken(
   clientId: string,
   onSuccess: (accessToken: string) => void,
-  onError: (err: string) => void
+  onError: (err: string) => void,
+  prompt: string = 'select_account'
 ): void {
   if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(STORAGE_CLIENT_ID_KEY, clientId);
+  } catch (e) {}
 
   const handleInit = () => {
     try {
       const client = (window as any).google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: DRIVE_SCOPE,
+        prompt: prompt,
         callback: (response: any) => {
           if (response.error) {
             onError(response.error_description || response.error);
@@ -126,7 +132,7 @@ export function requestGoogleDriveToken(
           }
         },
       });
-      client.requestAccessToken();
+      client.requestAccessToken({ prompt: prompt });
     } catch (err: any) {
       onError(err.message || 'OAuth Client Initialization failed');
     }
@@ -145,6 +151,17 @@ export function requestGoogleDriveToken(
   } else {
     handleInit();
   }
+}
+
+/**
+ * Silently refresh OAuth 2.0 Access Token without popups
+ */
+export function requestSilentGoogleDriveToken(
+  clientId: string,
+  onSuccess: (accessToken: string) => void,
+  onError: (err: string) => void
+): void {
+  requestGoogleDriveToken(clientId, onSuccess, onError, '');
 }
 
 /**

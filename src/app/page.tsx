@@ -22,9 +22,11 @@ import { exportToWinUIJson, importFromWinUIJson, calculateJsonHash } from '../ut
 import {
   SyncState,
   STORAGE_LAST_SYNC_KEY,
+  STORAGE_CLIENT_ID_KEY,
   getStoredAccessToken,
   clearStoredToken,
   requestGoogleDriveToken,
+  requestSilentGoogleDriveToken,
   uploadToGoogleDrive,
   downloadFromGoogleDrive,
   performSmartSync,
@@ -120,6 +122,8 @@ export default function HomePage() {
 
     // Check Google Drive token for initial load smart sync (1:1 WinUI SyncService algorithm)
     const token = getStoredAccessToken();
+    const savedClientId = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_CLIENT_ID_KEY) : null;
+
     if (token) {
       setAccessToken(token);
       setSyncState('syncing');
@@ -136,13 +140,47 @@ export default function HomePage() {
             localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
           } catch (e) {}
           setSyncState('synced');
-        } else if (res.isAuthError) {
-          setAccessToken(null);
-          setSyncState('unauthenticated');
+        } else if (res.isAuthError && savedClientId) {
+          setSyncState('syncing');
+          requestSilentGoogleDriveToken(
+            savedClientId,
+            (newToken) => {
+              setAccessToken(newToken);
+              performSmartSync(newToken, data).then((sRes) => {
+                if (sRes.success && sRes.nodes) {
+                  setNodes(sRes.nodes);
+                  saveStoredNodes(sRes.nodes);
+                }
+                setSyncState('synced');
+              });
+            },
+            () => {
+              setAccessToken(null);
+              setSyncState('unauthenticated');
+            }
+          );
         } else {
           setSyncState('synced');
         }
       });
+    } else if (savedClientId) {
+      setSyncState('syncing');
+      requestSilentGoogleDriveToken(
+        savedClientId,
+        (newToken) => {
+          setAccessToken(newToken);
+          performSmartSync(newToken, data).then((sRes) => {
+            if (sRes.success && sRes.nodes) {
+              setNodes(sRes.nodes);
+              saveStoredNodes(sRes.nodes);
+            }
+            setSyncState('synced');
+          });
+        },
+        () => {
+          setSyncState('unauthenticated');
+        }
+      );
     } else {
       setSyncState('unauthenticated');
     }
