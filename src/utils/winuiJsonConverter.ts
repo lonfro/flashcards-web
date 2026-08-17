@@ -11,6 +11,8 @@ export interface WinUIDividerJson {
   $type: 'Divider';
   Name: string;
   Children: (WinUIDividerJson | WinUICardJson)[];
+  TotalChildren: number;
+  IsExpanded: boolean;
 }
 
 export interface LibraryTreeJson {
@@ -23,8 +25,19 @@ export interface WinUISyncMetadataJson {
 }
 
 /**
+ * Escapes characters matching C# System.Text.Json default JavaScriptEncoder 1:1
+ * (Escapes quotes \", non-ASCII characters (> 127) and HTML chars ', +, <, >, & as uppercase hex \uXXXX)
+ */
+function escapeCSharpJson(jsonStr: string): string {
+  const escapedQuotes = jsonStr.replace(/\\"/g, '\\u0022');
+  return escapedQuotes.replace(/[\u007f-\uffff'<>&+]/g, (c) => {
+    return '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0').toUpperCase();
+  });
+}
+
+/**
  * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
- * Supports optional `pretty` parameter (defaults to true). Use pretty=false for 1:1 C# minified ComputeHash SHA-256 matching.
+ * Matches C# JsonSerializer output 1:1 including TotalChildren, IsExpanded, and JavaScriptEncoder Unicode escaping.
  */
 export function exportToWinUIJson(
   nodes: NodeData[],
@@ -54,10 +67,23 @@ export function exportToWinUIJson(
         .map((child) => convertNode(child.id))
         .filter((child): child is WinUIDividerJson | WinUICardJson => child !== null);
 
+      const countCards = (items: (WinUIDividerJson | WinUICardJson)[]): number => {
+        let count = 0;
+        for (const item of items) {
+          if (item.$type === 'Card') count += 1;
+          else if (item.$type === 'Divider' && item.Children) {
+            count += countCards(item.Children);
+          }
+        }
+        return count;
+      };
+
       return {
         $type: 'Divider',
         Name: node.name || 'Divider',
         Children: mappedChildren,
+        TotalChildren: countCards(mappedChildren),
+        IsExpanded: false,
       };
     }
 
@@ -68,11 +94,11 @@ export function exportToWinUIJson(
     .map((root) => convertNode(root.id))
     .filter((x): x is WinUIDividerJson | WinUICardJson => x !== null);
 
-  if (targetDividerId) {
-    return JSON.stringify(exportedTree, null, pretty ? 2 : undefined);
-  }
+  const rawJson = targetDividerId
+    ? JSON.stringify(exportedTree, null, pretty ? 2 : undefined)
+    : JSON.stringify({ Contents: exportedTree }, null, pretty ? 2 : undefined);
 
-  return JSON.stringify({ Contents: exportedTree }, null, pretty ? 2 : undefined);
+  return escapeCSharpJson(rawJson);
 }
 
 /**
