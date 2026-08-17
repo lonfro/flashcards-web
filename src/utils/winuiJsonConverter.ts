@@ -37,7 +37,7 @@ function escapeCSharpJson(jsonStr: string): string {
 
 /**
  * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
- * Matches C# JsonSerializer output 1:1 including TotalChildren, IsExpanded, and JavaScriptEncoder Unicode escaping.
+ * Matches C# AppJsonContext / JsonSerializer output 1:1 including TotalChildren, IsExpanded, and JavaScriptEncoder Unicode escaping.
  */
 export function exportToWinUIJson(
   nodes: NodeData[],

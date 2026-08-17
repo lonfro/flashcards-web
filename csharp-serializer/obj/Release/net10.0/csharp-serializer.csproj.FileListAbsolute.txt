@@ -1,0 +1,15 @@
+/home/test/flashcards-web/csharp-serializer/bin/Release/net10.0/csharp-serializer
+/home/test/flashcards-web/csharp-serializer/bin/Release/net10.0/csharp-serializer.deps.json
+/home/test/flashcards-web/csharp-serializer/bin/Release/net10.0/csharp-serializer.runtimeconfig.json
+/home/test/flashcards-web/csharp-serializer/bin/Release/net10.0/csharp-serializer.dll
+/home/test/flashcards-web/csharp-serializer/bin/Release/net10.0/csharp-serializer.pdb
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.GeneratedMSBuildEditorConfig.editorconfig
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.AssemblyInfoInputs.cache
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.AssemblyInfo.cs
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.csproj.CoreCompileInputs.cache
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.sourcelink.json
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.dll
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/refint/csharp-serializer.dll
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.pdb
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/csharp-serializer.genruntimeconfig.cache
+/home/test/flashcards-web/csharp-serializer/obj/Release/net10.0/ref/csharp-serializer.dll
