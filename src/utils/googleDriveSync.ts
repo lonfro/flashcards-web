@@ -301,8 +301,7 @@ export async function uploadToGoogleDrive(
 ): Promise<{ success: boolean; fileId?: string; error?: string; isAuthError?: boolean }> {
   try {
     const libraryJson = exportToWinUIJson(nodes, null, true);
-    const minifiedJson = exportToWinUIJson(nodes, null, false);
-    const hash = await calculateJsonHash(minifiedJson);
+    const hash = await calculateJsonHash(libraryJson);
     const meta: WinUISyncMetadata = {
       Hash: hash,
       ModifiedAt: new Date().toISOString(),

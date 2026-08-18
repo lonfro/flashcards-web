@@ -43,7 +43,7 @@ namespace Flashcards.WinUISerializer
     }
 
     [JsonSourceGenerationOptions(
-        WriteIndented = false,
+        WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonSerializable(typeof(LibraryTree))]
     [JsonSerializable(typeof(Node))]

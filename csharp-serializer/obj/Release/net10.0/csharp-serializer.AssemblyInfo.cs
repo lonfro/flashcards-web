@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("csharp-serializer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ca8430524e5c0926e3d88a5910e2c75b8c8b6cd1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+be7782c723c763b647f4a7bed65f6898c31a8105")]
 [assembly: System.Reflection.AssemblyProductAttribute("csharp-serializer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("csharp-serializer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
