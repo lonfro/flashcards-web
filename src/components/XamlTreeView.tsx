@@ -261,10 +261,10 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
                   if (e.key === 'Enter') handleSaveRename(node);
                   if (e.key === 'Escape') setEditingNodeId(null);
                 }}
-                className="bg-slate-950 border border-indigo-500 px-1 py-0.5 rounded text-xs text-slate-100 w-full focus:outline-none"
+                className="bg-slate-950 border border-indigo-500 px-1.5 py-0.5 rounded text-xs text-slate-100 w-full focus:outline-none"
               />
             ) : (
-              <span className="truncate text-xs sm:text-[13px] leading-none">{node.name}</span>
+              <span className="truncate text-xs sm:text-[13px] leading-normal py-0.5">{node.name}</span>
             )}
           </div>
 
