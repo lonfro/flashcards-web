@@ -78,44 +78,44 @@ export const WinUITitleBar: React.FC<WinUITitleBarProps> = ({
           {syncState === 'syncing' && (
             <button
               onClick={onManualSync}
-              className="flex items-center space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-[10px] sm:text-[11px] font-medium hover:bg-indigo-900 transition-colors"
+              className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-[11px] font-medium hover:bg-indigo-900 transition-colors"
               title="Syncing... Click to re-trigger manual sync"
             >
-              <SpinIcon size={12} className="animate-spin text-indigo-400" />
-              <span className="hidden xs:inline">Syncing...</span>
+              <SpinIcon size={12} className="animate-spin text-indigo-400 shrink-0" />
+              <span className="truncate">Google Drive syncing...</span>
             </button>
           )}
 
           {syncState === 'synced' && (
             <button
               onClick={onManualSync}
-              className="flex items-center space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[10px] sm:text-[11px] font-medium hover:bg-emerald-900/80 transition-colors cursor-pointer"
+              className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[11px] font-medium hover:bg-emerald-900/80 transition-colors cursor-pointer"
               title={`Click to trigger manual Google Drive sync (Last synced: ${lastSyncTime || 'just now'})`}
             >
-              <CheckCircle2 size={12} className="text-emerald-400" />
-              <span className="hidden xs:inline">Drive Synced</span>
+              <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+              <span className="truncate">Google Drive synced</span>
             </button>
           )}
 
           {syncState === 'error' && (
             <button
               onClick={onManualSync || (() => onNavigate('SettingsPage'))}
-              className="flex items-center space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-rose-300 text-[10px] sm:text-[11px] font-medium hover:bg-rose-900/80 transition-colors cursor-pointer"
+              className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-rose-950/60 border border-rose-500/40 text-rose-300 text-[11px] font-medium hover:bg-rose-900/80 transition-colors cursor-pointer"
               title="Click to retry Google Drive sync"
             >
-              <AlertCircle size={12} className="text-rose-400" />
-              <span className="hidden xs:inline">Sync Error</span>
+              <AlertCircle size={12} className="text-rose-400 shrink-0" />
+              <span className="truncate">Google Drive sync error</span>
             </button>
           )}
 
           {syncState === 'unauthenticated' && (
             <button
               onClick={() => onNavigate('SettingsPage')}
-              className="flex items-center space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 text-[10px] sm:text-[11px] hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+              className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 text-[11px] hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
               title="Click to connect Google Drive in Settings"
             >
-              <CloudOff size={12} className="text-slate-500" />
-              <span className="hidden xs:inline">Offline</span>
+              <CloudOff size={12} className="text-slate-500 shrink-0" />
+              <span className="truncate">Google Drive offline</span>
             </button>
           )}
 
