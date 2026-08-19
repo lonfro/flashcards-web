@@ -153,69 +153,72 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   }
 
   return (
-    <div className="flex-1 h-full flex flex-col justify-between items-center relative overflow-hidden select-none p-3 sm:p-8 touch-manipulation">
+    <div className="flex-1 h-full flex flex-col justify-between items-center relative overflow-hidden select-none p-3 sm:p-6">
       {/* Dynamic Header Badge */}
-      <div className="w-full flex items-center justify-between z-10 px-2 pt-1 sm:pt-0">
+      <div className="w-full flex items-center justify-between z-10 px-2 shrink-0">
         <div className="px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-md backdrop-blur-md text-xs font-medium text-slate-300 flex items-center space-x-1.5 max-w-[200px] sm:max-w-none truncate">
           <RefreshCw size={12} className="text-purple-400 shrink-0" />
           <span className="truncate">{selectedDividerNode ? selectedDividerNode.name : 'All Decks (Root Tree)'}</span>
         </div>
-        <span className="text-[11px] sm:text-xs font-mono text-slate-400 bg-slate-900/80 px-2 py-1 rounded border border-slate-800">
+        <span className="text-[11px] sm:text-xs font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
           {currentIndex + 1} / {queue.length}
         </span>
       </div>
 
-      {/* Center Card Viewport */}
-      <div className="flex-1 w-full flex items-center justify-center py-2 sm:py-4">
+      {/* Center Card Viewport (min-h-0 prevents card from overflowing and pushing buttons offscreen) */}
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center py-2">
         <XamlCardControl
           cardNode={currentCardNode}
           isFlipped={isFlipped}
           onFlip={() => setIsFlipped(!isFlipped)}
           showProgressBar={false}
           isEditButtonVisible={false}
+          showFooterHint={false}
           cardSettings={cardSettings}
         />
       </div>
 
-      {/* Rating Buttons Bar (2x2 grid on mobile, flex row on desktop) */}
-      <div className="w-full max-w-lg z-20 pb-safe pb-2 sm:pb-4">
+      {/* Rating Buttons Bar (Clean horizontal flex on PC, 2x2 grid on mobile) */}
+      <div className="w-full max-w-2xl z-20 pb-safe pb-1 sm:pb-2 shrink-0">
         {isFlipped ? (
-          <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-center gap-2 sm:space-x-3 transition-all animate-in fade-in slide-in-from-bottom-2">
+          <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-center gap-2 sm:gap-3 transition-all animate-in fade-in slide-in-from-bottom-2">
             <button
               onClick={() => handleRateDifficulty(Difficulty.Again)}
-              className="py-3 sm:py-2.5 px-3 bg-slate-900 hover:bg-rose-950 text-rose-400 border border-rose-500/40 rounded-xl text-xs font-semibold shadow-lg hover:border-rose-500 transition-all flex items-center justify-center space-x-1.5 touch-manipulation"
+              className="py-2.5 sm:py-2 px-3 sm:px-4 bg-slate-900 hover:bg-rose-950 text-rose-400 border border-rose-500/40 rounded-xl text-xs sm:text-sm font-semibold shadow-lg hover:border-rose-500 transition-all flex items-center justify-center space-x-1.5"
               title="Press 1"
             >
-              <span className="font-mono opacity-60 hidden sm:inline">(1)</span>
+              <span className="font-mono opacity-60">(1)</span>
               <span>Again (+{difficultySettings?.againDelta ?? 7})</span>
             </button>
             <button
               onClick={() => handleRateDifficulty(Difficulty.Hard)}
-              className="py-3 sm:py-2.5 px-3 bg-slate-900 hover:bg-amber-950 text-amber-400 border border-amber-500/40 rounded-xl text-xs font-semibold shadow-lg hover:border-amber-500 transition-all flex items-center justify-center space-x-1.5 touch-manipulation"
+              className="py-2.5 sm:py-2 px-3 sm:px-4 bg-slate-900 hover:bg-amber-950 text-amber-400 border border-amber-500/40 rounded-xl text-xs sm:text-sm font-semibold shadow-lg hover:border-amber-500 transition-all flex items-center justify-center space-x-1.5"
               title="Press 2"
             >
-              <span className="font-mono opacity-60 hidden sm:inline">(2)</span>
+              <span className="font-mono opacity-60">(2)</span>
               <span>Hard (+{difficultySettings?.hardDelta ?? 5})</span>
             </button>
             <button
               onClick={() => handleRateDifficulty(Difficulty.Good)}
-              className="py-3 sm:py-2.5 px-3 bg-slate-900 hover:bg-indigo-950 text-indigo-400 border border-indigo-500/40 rounded-xl text-xs font-semibold shadow-lg hover:border-indigo-500 transition-all flex items-center justify-center space-x-1.5 touch-manipulation"
+              className="py-2.5 sm:py-2 px-3 sm:px-4 bg-slate-900 hover:bg-indigo-950 text-indigo-400 border border-indigo-500/40 rounded-xl text-xs sm:text-sm font-semibold shadow-lg hover:border-indigo-500 transition-all flex items-center justify-center space-x-1.5"
               title="Press 3"
             >
-              <span className="font-mono opacity-60 hidden sm:inline">(3)</span>
+              <span className="font-mono opacity-60">(3)</span>
               <span>Good ({difficultySettings?.goodDelta ?? -2})</span>
             </button>
             <button
               onClick={() => handleRateDifficulty(Difficulty.Easy)}
-              className="py-3 sm:py-2.5 px-3 bg-slate-900 hover:bg-emerald-950 text-emerald-400 border border-emerald-500/40 rounded-xl text-xs font-semibold shadow-lg hover:border-emerald-500 transition-all flex items-center justify-center space-x-1.5 touch-manipulation"
+              className="py-2.5 sm:py-2 px-3 sm:px-4 bg-slate-900 hover:bg-emerald-950 text-emerald-400 border border-emerald-500/40 rounded-xl text-xs sm:text-sm font-semibold shadow-lg hover:border-emerald-500 transition-all flex items-center justify-center space-x-1.5"
               title="Press 4"
             >
-              <span className="font-mono opacity-60 hidden sm:inline">(4)</span>
+              <span className="font-mono opacity-60">(4)</span>
               <span>Easy ({difficultySettings?.easyDelta ?? -5})</span>
             </button>
           </div>
         ) : (
-          <p className="text-[11px] sm:text-xs text-slate-500 text-center italic">Tap card or press Space to reveal answer</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 text-center italic py-1">
+            Click card or press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-mono text-[10px]">Space</kbd> to reveal answer
+          </p>
         )}
       </div>
     </div>

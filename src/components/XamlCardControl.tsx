@@ -15,6 +15,7 @@ interface XamlCardControlProps {
   onStartEditing?: () => void;
   isEditButtonVisible?: boolean;
   showProgressBar?: boolean;
+  showFooterHint?: boolean;
   cardSettings?: CardSettingsData;
 }
 
@@ -25,6 +26,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
   onStartEditing,
   isEditButtonVisible = true,
   showProgressBar = true,
+  showFooterHint = true,
   cardSettings = DEFAULT_CARD_SETTINGS,
 }) => {
   const [scale, setScale] = useState<number>(1.0);
@@ -178,9 +180,11 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
       </div>
 
       {/* Bottom Footer Hint */}
-      <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium z-10 flex items-center space-x-1">
-        <span>Tap card or press <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-mono text-[9px] sm:text-[10px]">Space</kbd> to flip</span>
-      </div>
+      {showFooterHint && (
+        <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium z-10 flex items-center space-x-1 shrink-0">
+          <span>Tap card or press <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-mono text-[9px] sm:text-[10px]">Space</kbd> to flip</span>
+        </div>
+      )}
     </div>
   );
 };
