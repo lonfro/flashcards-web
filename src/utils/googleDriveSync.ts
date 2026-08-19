@@ -249,7 +249,38 @@ export async function requestSilentGoogleDriveToken(
 }
 
 /**
- * Upload single file content to Google Drive appDataFolder (create or patch update)
+ * 1:1 Find file in appDataFolder matching WinUI 3 FindFileAsync
+ */
+async function findFileInAppDataFolder(
+  accessToken: string,
+  fileName: string
+): Promise<{ success: boolean; file?: { id: string; name: string }; isAuthError?: boolean; error?: string }> {
+  try {
+    const query = encodeURIComponent(`name = '${fileName}' and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${query}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime%20desc&pageSize=1`;
+
+    const searchRes = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (searchRes.status === 401) {
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
+    }
+
+    if (!searchRes.ok) {
+      return { success: false, error: `Search failed for ${fileName}: ${searchRes.statusText}` };
+    }
+
+    const searchData = await searchRes.json();
+    const file = searchData.files && searchData.files.length > 0 ? searchData.files[0] : undefined;
+    return { success: true, file };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Search network error' };
+  }
+}
+
+/**
+ * Upload single file content to Google Drive appDataFolder 1:1 matching WinUI 3 UploadOrUpdateAsync
  */
 async function uploadSingleFileToDrive(
   accessToken: string,
@@ -257,32 +288,20 @@ async function uploadSingleFileToDrive(
   content: string
 ): Promise<{ success: boolean; isAuthError?: boolean; error?: string }> {
   try {
-    const searchRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${fileName}'%20and%20trashed=false`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
+    const findRes = await findFileInAppDataFolder(accessToken, fileName);
+    if (!findRes.success) return findRes;
 
-    if (searchRes.status === 401) {
-      return { success: false, isAuthError: true, error: 'Authentication token expired' };
-    }
-
-    if (!searchRes.ok) {
-      return { success: false, error: `Search file failed: ${searchRes.statusText}` };
-    }
-
-    const searchData = await searchRes.json();
-    const existingFile = searchData.files && searchData.files.length > 0 ? searchData.files[0] : null;
+    const existingFile = findRes.file;
 
     if (existingFile) {
+      // 1:1 WinUI PATCH /upload/drive/v3/files/{id}?uploadType=media
       const updateRes = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`,
         {
           method: 'PATCH',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json; charset=UTF-8',
           },
           body: content,
         }
@@ -293,25 +312,29 @@ async function uploadSingleFileToDrive(
       }
 
       if (!updateRes.ok) {
-        return { success: false, error: `Update file failed: ${updateRes.statusText}` };
+        return { success: false, error: `Update failed for ${fileName}: ${updateRes.statusText}` };
       }
 
       return { success: true };
     } else {
+      // 1:1 WinUI POST /upload/drive/v3/files?uploadType=multipart with multipart/related
       const metadata = {
         name: fileName,
         parents: ['appDataFolder'],
       };
 
-      const form = new FormData();
-      form.append(
-        'metadata',
-        new Blob([JSON.stringify(metadata)], { type: 'application/json' })
-      );
-      form.append(
-        'file',
-        new Blob([content], { type: 'application/json' })
-      );
+      const boundary = '-------314159265358979323846';
+      const delimiter = `\r\n--${boundary}\r\n`;
+      const closeDelimiter = `\r\n--${boundary}--`;
+
+      const multipartRequestBody =
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata) +
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        content +
+        closeDelimiter;
 
       const createRes = await fetch(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
@@ -319,8 +342,9 @@ async function uploadSingleFileToDrive(
           method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
           },
-          body: form,
+          body: multipartRequestBody,
         }
       );
 
@@ -329,18 +353,18 @@ async function uploadSingleFileToDrive(
       }
 
       if (!createRes.ok) {
-        return { success: false, error: `Create file failed: ${createRes.statusText}` };
+        return { success: false, error: `Create failed for ${fileName}: ${createRes.statusText}` };
       }
 
       return { success: true };
     }
   } catch (err: any) {
-    return { success: false, error: err.message || 'Network error during upload' };
+    return { success: false, error: err.message || 'Upload network error' };
   }
 }
 
 /**
- * 1:1 Push to Google Drive (Atomic upload of library.json + sync.json metadata)
+ * 1:1 Push to Google Drive (Atomic upload of library.json + sync.json metadata matching WinUI 3 PushInternalAsync)
  */
 export async function uploadToGoogleDrive(
   accessToken: string,
@@ -369,35 +393,21 @@ export async function uploadToGoogleDrive(
 }
 
 /**
- * Fetch remote sync.json metadata from Google Drive appDataFolder
+ * Fetch remote sync.json metadata from Google Drive appDataFolder matching WinUI 3 GetSyncMetadataAsync
  */
 export async function getRemoteMetadataFromDrive(
   accessToken: string
 ): Promise<{ success: boolean; metadata?: WinUISyncMetadata; isAuthError?: boolean; error?: string }> {
   try {
-    const searchRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${METADATA_FILE_NAME}'%20and%20trashed=false`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
+    const findRes = await findFileInAppDataFolder(accessToken, METADATA_FILE_NAME);
+    if (!findRes.success) return findRes;
 
-    if (searchRes.status === 401) {
-      return { success: false, isAuthError: true, error: 'Authentication token expired' };
-    }
-
-    if (!searchRes.ok) {
-      return { success: false, error: `Search metadata failed: ${searchRes.statusText}` };
-    }
-
-    const searchData = await searchRes.json();
-    if (!searchData.files || searchData.files.length === 0) {
+    if (!findRes.file) {
       return { success: true, metadata: undefined };
     }
 
-    const fileId = searchData.files[0].id;
     const downloadRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      `https://www.googleapis.com/drive/v3/files/${findRes.file.id}?alt=media`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
@@ -420,7 +430,7 @@ export async function getRemoteMetadataFromDrive(
 }
 
 /**
- * Download and parse library.json from Google Drive
+ * Download and parse library.json from Google Drive matching WinUI 3 DownloadSyncFileAsync
  */
 export async function downloadFromGoogleDrive(
   accessToken: string,
@@ -428,29 +438,15 @@ export async function downloadFromGoogleDrive(
   overwriteLocal: boolean = true
 ): Promise<{ success: boolean; nodes?: NodeData[]; isAuthError?: boolean; error?: string }> {
   try {
-    const searchRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${LIBRARY_FILE_NAME}'%20and%20trashed=false`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
+    const findRes = await findFileInAppDataFolder(accessToken, LIBRARY_FILE_NAME);
+    if (!findRes.success) return findRes;
 
-    if (searchRes.status === 401) {
-      return { success: false, isAuthError: true, error: 'Authentication token expired' };
+    if (!findRes.file) {
+      return { success: false, error: 'No library.json found in Google Drive appDataFolder' };
     }
 
-    if (!searchRes.ok) {
-      return { success: false, error: `Search library failed: ${searchRes.statusText}` };
-    }
-
-    const searchData = await searchRes.json();
-    if (!searchData.files || searchData.files.length === 0) {
-      return { success: false, error: 'No existing library.json found in Google Drive appDataFolder' };
-    }
-
-    const fileId = searchData.files[0].id;
     const downloadRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      `https://www.googleapis.com/drive/v3/files/${findRes.file.id}?alt=media`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
@@ -469,13 +465,13 @@ export async function downloadFromGoogleDrive(
     try {
       parsedJson = JSON.parse(jsonText);
     } catch (parseErr) {
-      return { success: false, error: 'Downloaded library.json is corrupted or not valid JSON' };
+      return { success: false, error: 'Downloaded library.json is not valid JSON' };
     }
 
     const parsedNodes = importFromWinUIJson(parsedJson, currentNodes, null, overwriteLocal);
 
     if (parsedNodes.length === 0 && jsonText.length > 50) {
-      return { success: false, error: 'Parsed 0 items from downloaded library.json' };
+      return { success: false, error: 'Failed to extract decks from downloaded library.json' };
     }
 
     return {
@@ -488,7 +484,7 @@ export async function downloadFromGoogleDrive(
 }
 
 /**
- * 1:1 Port of WinUI 3 C# GoogleDriveSyncService.cs SyncAsync algorithm:
+ * 1:1 Port of WinUI 3 C# GoogleDriveSyncService.cs / LibraryCoordinator.cs SyncAsync algorithm:
  * Compares local vs remote sync.json metadata.
  * Only uploads when local is newer; downloads when remote is newer!
  */
