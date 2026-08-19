@@ -142,6 +142,89 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     }));
   };
 
+  // Compute flat ordered list of currently visible nodes in the tree
+  const visibleNodes = useMemo(() => {
+    const list: TreeNode[] = [];
+    const traverse = (nodeList: TreeNode[]) => {
+      for (const node of nodeList) {
+        list.push(node);
+        if (node.type === 'divider' && expandedFolderIds[node.id]) {
+          traverse(node.childrenNodes);
+        }
+      }
+    };
+    traverse(treeData);
+    return list;
+  }, [treeData, expandedFolderIds]);
+
+  // Arrow Key Hotkeys for TreeView Navigation (1:1 WinUI 3 TreeView)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input/textarea or renaming
+      const target = e.target as HTMLElement | null;
+      const targetTag = target?.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea' || editingNodeId) {
+        return;
+      }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        if (visibleNodes.length === 0) return;
+
+        const currentIndex = visibleNodes.findIndex((n) => n.id === selectedNodeId);
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const nextIndex = currentIndex < 0 ? 0 : Math.min(visibleNodes.length - 1, currentIndex + 1);
+          const targetNode = visibleNodes[nextIndex];
+          if (targetNode) {
+            onSelectNode(targetNode);
+            // If it's a divider, automatically expand it so its cards/sub-decks are revealed!
+            if (targetNode.type === 'divider' && !expandedFolderIds[targetNode.id]) {
+              setExpandedFolderIds((prev) => ({ ...prev, [targetNode.id]: true }));
+            }
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prevIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
+          const targetNode = visibleNodes[prevIndex];
+          if (targetNode) {
+            onSelectNode(targetNode);
+            // If it's a divider, automatically expand it
+            if (targetNode.type === 'divider' && !expandedFolderIds[targetNode.id]) {
+              setExpandedFolderIds((prev) => ({ ...prev, [targetNode.id]: true }));
+            }
+          }
+        } else if (e.key === 'ArrowRight') {
+          const currentNode = visibleNodes[currentIndex];
+          if (currentNode && currentNode.type === 'divider') {
+            e.preventDefault();
+            if (!expandedFolderIds[currentNode.id]) {
+              setExpandedFolderIds((prev) => ({ ...prev, [currentNode.id]: true }));
+            } else if (currentNode.childrenNodes.length > 0) {
+              onSelectNode(currentNode.childrenNodes[0]);
+            }
+          }
+        } else if (e.key === 'ArrowLeft') {
+          const currentNode = visibleNodes[currentIndex];
+          if (currentNode) {
+            e.preventDefault();
+            if (currentNode.type === 'divider' && expandedFolderIds[currentNode.id]) {
+              setExpandedFolderIds((prev) => ({ ...prev, [currentNode.id]: false }));
+            } else if (currentNode.parentId) {
+              const parentNode = nodes.find((n) => n.id === currentNode.parentId);
+              if (parentNode) {
+                onSelectNode(parentNode);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visibleNodes, selectedNodeId, expandedFolderIds, editingNodeId, onSelectNode, nodes]);
+
   const handleStartRename = (node: NodeData) => {
     setEditingNodeId(node.id);
     setEditingName(node.name);
