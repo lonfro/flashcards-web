@@ -707,7 +707,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-dvh w-screen max-w-full bg-slate-950 text-slate-100 overflow-hidden font-sans select-none fixed inset-0">
       {/* WinUI 3 TitleBar & Navigation with Auto-Sync Status Badge & Mobile View Switcher */}
       <WinUITitleBar
         activePage={activePage}

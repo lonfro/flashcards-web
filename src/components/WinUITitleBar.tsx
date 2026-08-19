@@ -41,7 +41,7 @@ export const WinUITitleBar: React.FC<WinUITitleBarProps> = ({
   onToggleMobileView,
 }) => {
   return (
-    <header className="w-full bg-slate-900/95 border-b border-slate-800 text-slate-100 flex flex-col backdrop-blur-md select-none shrink-0 z-30">
+    <header className="w-full bg-slate-900/95 border-b border-slate-800 text-slate-100 flex flex-col backdrop-blur-md select-none shrink-0 z-30 pt-safe pl-safe pr-safe">
       {/* Top Window TitleBar */}
       <div className="h-9 px-2 sm:px-3 flex items-center justify-between border-b border-slate-800/60 bg-slate-950/80 text-xs">
         <div className="flex items-center space-x-1.5 sm:space-x-2">

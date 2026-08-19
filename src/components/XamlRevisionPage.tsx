@@ -178,7 +178,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
       </div>
 
       {/* Rating Buttons Bar (2x2 grid on mobile, flex row on desktop) */}
-      <div className="w-full max-w-lg z-20 pb-2 sm:pb-4">
+      <div className="w-full max-w-lg z-20 pb-safe pb-2 sm:pb-4">
         {isFlipped ? (
           <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-center gap-2 sm:space-x-3 transition-all animate-in fade-in slide-in-from-bottom-2">
             <button

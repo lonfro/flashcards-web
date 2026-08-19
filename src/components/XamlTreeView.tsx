@@ -515,7 +515,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
       </div>
 
       {/* Mobile-Friendly Bottom Quick Actions Toolbar */}
-      <div className="p-2 border-t border-slate-800/80 bg-slate-950/90 flex items-center justify-around gap-1 shrink-0">
+      <div className="p-2 pb-safe border-t border-slate-800/80 bg-slate-950/90 flex items-center justify-around gap-1 shrink-0">
         <button
           onClick={() => onAddCard(selectedNodeId && nodes.find((n) => n.id === selectedNodeId)?.type === 'divider' ? selectedNodeId : null)}
           className="flex-1 py-2 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 shadow-sm touch-manipulation"
