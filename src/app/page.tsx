@@ -30,6 +30,7 @@ import {
   requestSilentGoogleDriveToken,
   uploadToGoogleDrive,
   downloadFromGoogleDrive,
+  getRemoteMetadataFromDrive,
   performSmartSync,
   saveStoredLocalMetadata,
 } from '../utils/googleDriveSync';
@@ -338,23 +339,43 @@ export default function HomePage() {
         setAccessToken(token);
         setSyncState('syncing');
 
-        performSmartSync(token, nodes).then((res) => {
-          if (res.success) {
-            if (res.nodes) {
-              setNodes(res.nodes);
-              saveStoredNodes(res.nodes);
-            }
+        // On first sign-in / connect: automatically restore decks from Google Drive
+        downloadFromGoogleDrive(token, nodes, true).then((dlRes) => {
+          if (dlRes.success && dlRes.nodes && dlRes.nodes.length > 0) {
+            setNodes(dlRes.nodes);
+            saveStoredNodes(dlRes.nodes);
+            const firstCard = dlRes.nodes.find((n) => n.type === 'card');
+            setSelectedNodeId(firstCard ? firstCard.id : (dlRes.nodes[0]?.id || null));
+
+            getRemoteMetadataFromDrive(token).then((metaRes) => {
+              if (metaRes.metadata) {
+                saveStoredLocalMetadata(metaRes.metadata);
+              }
+            });
+
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             setLastSyncTime(timeStr);
             try {
               localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
             } catch (e) {}
             setSyncState('synced');
-          } else if (res.isAuthError) {
-            setAccessToken(null);
-            setSyncState('unauthenticated');
           } else {
-            setSyncState('error');
+            // No existing library on Google Drive yet: upload current initial library
+            uploadToGoogleDrive(token, nodes).then((upRes) => {
+              if (upRes.success) {
+                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setLastSyncTime(timeStr);
+                try {
+                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
+                } catch (e) {}
+                setSyncState('synced');
+              } else if (upRes.isAuthError) {
+                setAccessToken(null);
+                setSyncState('unauthenticated');
+              } else {
+                setSyncState('error');
+              }
+            });
           }
         });
       },
