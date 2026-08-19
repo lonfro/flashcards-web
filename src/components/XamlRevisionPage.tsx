@@ -152,15 +152,40 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
     );
   }
 
+  // 1:1 WinUI CardViewModel.cs WeightPercentage calculation formula
+  const maxW = cardSettings?.maximumWeight ?? 30.0;
+  const minW = cardSettings?.minimumWeight ?? 1.0;
+  const rawWeight = typeof currentCardNode?.card?.weight === 'number' ? currentCardNode.card.weight : (cardSettings?.defaultWeight ?? 20.0);
+  const weightPercent = Math.min(
+    100,
+    Math.max(0, Math.round(((maxW - rawWeight) / (maxW - minW)) * 100))
+  );
+
   return (
     <div className="flex-1 h-full flex flex-col justify-between items-center relative overflow-hidden select-none p-3 sm:p-6">
-      {/* Dynamic Header Badge */}
-      <div className="w-full flex items-center justify-between z-10 px-2 shrink-0">
-        <div className="px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-md backdrop-blur-md text-xs font-medium text-slate-300 flex items-center space-x-1.5 max-w-[200px] sm:max-w-none truncate">
+      {/* Dynamic Header: Deck Badge + Learning Progress + Card Counter */}
+      <div className="w-full flex items-center justify-between z-10 px-2 shrink-0 gap-2">
+        <div className="px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-md backdrop-blur-md text-xs font-medium text-slate-300 flex items-center space-x-1.5 max-w-[160px] sm:max-w-[240px] truncate">
           <RefreshCw size={12} className="text-purple-400 shrink-0" />
           <span className="truncate">{selectedDividerNode ? selectedDividerNode.name : 'All Decks (Root Tree)'}</span>
         </div>
-        <span className="text-[11px] sm:text-xs font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
+
+        {/* WinUI 3 Learning Progress Bar */}
+        <div
+          className="flex items-center space-x-2 bg-slate-900/80 px-2.5 sm:px-3 py-1 rounded-md border border-slate-800"
+          title={`Card learning progress: ${weightPercent}% (Weight: ${rawWeight})`}
+        >
+          <span className="text-[10px] sm:text-xs text-slate-400 font-medium">Progress</span>
+          <div className="w-14 sm:w-28 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
+            <div
+              className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${weightPercent}%` }}
+            />
+          </div>
+          <span className="text-[10px] font-mono text-indigo-400">({weightPercent}%)</span>
+        </div>
+
+        <span className="text-[11px] sm:text-xs font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800 shrink-0">
           {currentIndex + 1} / {queue.length}
         </span>
       </div>

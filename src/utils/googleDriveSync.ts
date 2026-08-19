@@ -13,6 +13,7 @@ export const STORAGE_TOKEN_KEY = 'flashcards_web_gdrive_access_token_v1';
 export const STORAGE_TOKEN_EXP_KEY = 'flashcards_web_gdrive_token_exp_v1';
 export const STORAGE_LAST_SYNC_KEY = 'flashcards_web_gdrive_last_sync_v1';
 export const STORAGE_LOCAL_METADATA_KEY = 'flashcards_web_local_metadata_v1';
+export const STORAGE_USER_EMAIL_KEY = 'flashcards_web_gdrive_user_email_v1';
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'error' | 'unauthenticated';
 
@@ -102,7 +103,81 @@ export function saveStoredLocalMetadata(meta: WinUISyncMetadata): void {
 }
 
 /**
- * Request OAuth 2.0 Access Token from Google Identity Services
+ * Silently refreshes the Google Access Token using the Vercel / Next.js serverless route
+ * powered by the permanent HttpOnly refresh_token cookie
+ */
+export async function refreshAccessTokenViaServer(): Promise<{
+  success: boolean;
+  accessToken?: string;
+  expiresIn?: number;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/google/refresh', {
+      method: 'POST',
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      return { success: false, error: 'refresh_rejected' };
+    }
+
+    const data = await res.json();
+    if (data.success && data.accessToken) {
+      const expiresIn = data.expiresIn || 3600;
+      saveStoredToken(data.accessToken, expiresIn);
+      return { success: true, accessToken: data.accessToken, expiresIn };
+    }
+    return { success: false, error: data.error || 'no_access_token' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'server_refresh_failed' };
+  }
+}
+
+/**
+ * Opens a popup for Serverless Google OAuth 2.0 (Offline flow with permanent refresh_token)
+ */
+export function loginViaServerlessPopup(
+  clientId?: string,
+  onSuccess?: (token: string) => void,
+  onError?: (err: string) => void
+): void {
+  if (typeof window === 'undefined') return;
+
+  const width = 500;
+  const height = 650;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
+
+  const loginUrl = `/api/auth/google/login${clientId ? `?client_id=${encodeURIComponent(clientId)}` : ''}`;
+  const popup = window.open(
+    loginUrl,
+    'google_oauth_serverless_popup',
+    `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no`
+  );
+
+  const handleMessage = (event: MessageEvent) => {
+    if (event.data?.type === 'GOOGLE_AUTH_SUCCESS' && event.data.accessToken) {
+      window.removeEventListener('message', handleMessage);
+      const expiresIn = event.data.expiresIn || 3600;
+      saveStoredToken(event.data.accessToken, expiresIn);
+      if (event.data.email) {
+        try {
+          localStorage.setItem(STORAGE_USER_EMAIL_KEY, event.data.email);
+        } catch (e) {}
+      }
+      onSuccess?.(event.data.accessToken);
+    } else if (event.data?.type === 'GOOGLE_AUTH_ERROR') {
+      window.removeEventListener('message', handleMessage);
+      onError?.(event.data.error || 'Authentication error');
+    }
+  };
+
+  window.addEventListener('message', handleMessage);
+}
+
+/**
+ * Request OAuth 2.0 Access Token (Attempts serverless permanent flow first, falls back to GIS client)
  */
 export function requestGoogleDriveToken(
   clientId: string,
@@ -116,52 +191,67 @@ export function requestGoogleDriveToken(
     localStorage.setItem(STORAGE_CLIENT_ID_KEY, clientId);
   } catch (e) {}
 
-  const handleInit = () => {
-    try {
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: DRIVE_SCOPE,
-        prompt: prompt,
-        callback: (response: any) => {
-          if (response.error) {
-            onError(response.error_description || response.error);
-          } else if (response.access_token) {
-            const expiresIn = response.expires_in ? parseInt(response.expires_in, 10) : 3600;
-            saveStoredToken(response.access_token, expiresIn);
-            onSuccess(response.access_token);
-          }
-        },
-      });
-      client.requestAccessToken({ prompt: prompt });
-    } catch (err: any) {
-      onError(err.message || 'OAuth Client Initialization failed');
-    }
-  };
+  // 1. Try serverless OAuth popup for permanent offline refresh token
+  loginViaServerlessPopup(
+    clientId,
+    (token) => onSuccess(token),
+    (err) => {
+      // Fallback to client-side Google Identity Services if server credentials are not configured
+      const handleInit = () => {
+        try {
+          const client = (window as any).google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: DRIVE_SCOPE,
+            prompt: prompt,
+            callback: (response: any) => {
+              if (response.error) {
+                onError(response.error_description || response.error);
+              } else if (response.access_token) {
+                const expiresIn = response.expires_in ? parseInt(response.expires_in, 10) : 3600;
+                saveStoredToken(response.access_token, expiresIn);
+                onSuccess(response.access_token);
+              }
+            },
+          });
+          client.requestAccessToken({ prompt: prompt });
+        } catch (initErr: any) {
+          onError(initErr.message || 'OAuth Client Initialization failed');
+        }
+      };
 
-  if (!(window as any).google?.accounts?.oauth2) {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = handleInit;
-    script.onerror = () => {
-      onError('Failed to load Google Identity Services SDK.');
-    };
-    document.body.appendChild(script);
-  } else {
-    handleInit();
-  }
+      if (!(window as any).google?.accounts?.oauth2) {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = handleInit;
+        script.onerror = () => {
+          onError('Failed to load Google Identity Services SDK.');
+        };
+        document.body.appendChild(script);
+      } else {
+        handleInit();
+      }
+    }
+  );
 }
 
 /**
  * Silently refresh OAuth 2.0 Access Token without popups
  */
-export function requestSilentGoogleDriveToken(
+export async function requestSilentGoogleDriveToken(
   clientId: string,
   onSuccess: (accessToken: string) => void,
   onError: (err: string) => void
-): void {
-  requestGoogleDriveToken(clientId, onSuccess, onError, '');
+): Promise<void> {
+  const serverRefresh = await refreshAccessTokenViaServer();
+  if (serverRefresh.success && serverRefresh.accessToken) {
+    onSuccess(serverRefresh.accessToken);
+    return;
+  }
+
+  // Fallback to GIS silent prompt
+  requestGoogleDriveToken(clientId, onSuccess, onError, 'none');
 }
 
 /**
@@ -181,20 +271,18 @@ async function uploadSingleFileToDrive(
     );
 
     if (searchRes.status === 401) {
-      clearStoredToken();
-      return { success: false, isAuthError: true, error: 'Google Drive auth expired.' };
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
     }
 
     if (!searchRes.ok) {
-      throw new Error(`Search failed for ${fileName}: ${searchRes.statusText}`);
+      return { success: false, error: `Search file failed: ${searchRes.statusText}` };
     }
 
     const searchData = await searchRes.json();
-    const existingFile = searchData.files && searchData.files[0];
+    const existingFile = searchData.files && searchData.files.length > 0 ? searchData.files[0] : null;
 
-    let uploadRes;
     if (existingFile) {
-      uploadRes = await fetch(
+      const updateRes = await fetch(
         `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`,
         {
           method: 'PATCH',
@@ -205,37 +293,84 @@ async function uploadSingleFileToDrive(
           body: content,
         }
       );
+
+      if (updateRes.status === 401) {
+        return { success: false, isAuthError: true, error: 'Authentication token expired' };
+      }
+
+      if (!updateRes.ok) {
+        return { success: false, error: `Update file failed: ${updateRes.statusText}` };
+      }
+
+      return { success: true };
     } else {
       const metadata = {
         name: fileName,
         parents: ['appDataFolder'],
       };
-      const formData = new FormData();
-      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      formData.append('file', new Blob([content], { type: 'application/json' }));
 
-      uploadRes = await fetch(
+      const form = new FormData();
+      form.append(
+        'metadata',
+        new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+      );
+      form.append(
+        'file',
+        new Blob([content], { type: 'application/json' })
+      );
+
+      const createRes = await fetch(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
-          body: formData,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: form,
         }
       );
-    }
 
-    if (uploadRes.status === 401) {
-      clearStoredToken();
-      return { success: false, isAuthError: true, error: 'Google Drive auth expired.' };
-    }
+      if (createRes.status === 401) {
+        return { success: false, isAuthError: true, error: 'Authentication token expired' };
+      }
 
-    if (!uploadRes.ok) {
-      throw new Error(`Upload failed for ${fileName}: ${uploadRes.statusText}`);
-    }
+      if (!createRes.ok) {
+        return { success: false, error: `Create file failed: ${createRes.statusText}` };
+      }
 
+      return { success: true };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error during upload' };
+  }
+}
+
+/**
+ * 1:1 Push to Google Drive (Atomic upload of library.json + sync.json metadata)
+ */
+export async function uploadToGoogleDrive(
+  accessToken: string,
+  nodes: NodeData[]
+): Promise<{ success: boolean; isAuthError?: boolean; error?: string }> {
+  try {
+    const jsonContent = exportToWinUIJson(nodes);
+    const hash = await calculateJsonHash(jsonContent);
+    const modifiedAt = new Date().toISOString();
+
+    const libUpload = await uploadSingleFileToDrive(accessToken, LIBRARY_FILE_NAME, jsonContent);
+    if (!libUpload.success) return libUpload;
+
+    const metadata: WinUISyncMetadata = {
+      Hash: hash,
+      ModifiedAt: modifiedAt,
+    };
+    const metaUpload = await uploadSingleFileToDrive(accessToken, METADATA_FILE_NAME, JSON.stringify(metadata, null, 2));
+    if (!metaUpload.success) return metaUpload;
+
+    saveStoredLocalMetadata(metadata);
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || `Failed to upload ${fileName}` };
+    return { success: false, error: err.message || 'Failed to upload to Google Drive' };
   }
 }
 
@@ -254,83 +389,50 @@ export async function getRemoteMetadataFromDrive(
     );
 
     if (searchRes.status === 401) {
-      clearStoredToken();
-      return { success: false, isAuthError: true, error: 'Google Drive auth expired.' };
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
     }
 
     if (!searchRes.ok) {
-      throw new Error(`Search failed for ${METADATA_FILE_NAME}: ${searchRes.statusText}`);
+      return { success: false, error: `Search metadata failed: ${searchRes.statusText}` };
     }
 
     const searchData = await searchRes.json();
-    const file = searchData.files && searchData.files[0];
-
-    if (!file) {
+    if (!searchData.files || searchData.files.length === 0) {
       return { success: true, metadata: undefined };
     }
 
+    const fileId = searchData.files[0].id;
     const downloadRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
     if (downloadRes.status === 401) {
-      clearStoredToken();
-      return { success: false, isAuthError: true, error: 'Google Drive auth expired.' };
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
     }
 
     if (!downloadRes.ok) {
-      throw new Error(`Download failed for ${METADATA_FILE_NAME}: ${downloadRes.statusText}`);
+      return { success: false, error: `Download metadata failed: ${downloadRes.statusText}` };
     }
 
-    const metadata = await downloadRes.json();
+    const metaText = await downloadRes.text();
+    const metadata: WinUISyncMetadata = JSON.parse(metaText);
     return { success: true, metadata };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to fetch remote metadata' };
+    return { success: false, error: err.message || 'Failed to get remote metadata' };
   }
 }
 
 /**
- * Upload Flashcards library.json & sync.json to Google Drive appDataFolder 1:1 with WinUI SyncService
- */
-export async function uploadToGoogleDrive(
-  accessToken: string,
-  nodes: NodeData[]
-): Promise<{ success: boolean; fileId?: string; error?: string; isAuthError?: boolean }> {
-  try {
-    const libraryJson = exportToWinUIJson(nodes, null, true);
-    const hash = await calculateJsonHash(libraryJson);
-    const meta: WinUISyncMetadata = {
-      Hash: hash,
-      ModifiedAt: new Date().toISOString(),
-    };
-    const metadataJson = JSON.stringify(meta, null, 2);
-
-    // 1. Upload library.json
-    const libraryRes = await uploadSingleFileToDrive(accessToken, LIBRARY_FILE_NAME, libraryJson);
-    if (!libraryRes.success) return libraryRes;
-
-    // 2. Upload sync.json metadata file
-    const metadataRes = await uploadSingleFileToDrive(accessToken, METADATA_FILE_NAME, metadataJson);
-    if (!metadataRes.success) return metadataRes;
-
-    saveStoredLocalMetadata(meta);
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to sync to Google Drive' };
-  }
-}
-
-/**
- * Download Flashcards library.json from Google Drive AppData folder 1:1 with WinUI SyncService
+ * Download and parse library.json from Google Drive
  */
 export async function downloadFromGoogleDrive(
   accessToken: string,
-  existingNodes: NodeData[],
-  replaceMode: boolean = false
-): Promise<{ success: boolean; nodes?: NodeData[]; error?: string; isAuthError?: boolean }> {
+  currentNodes: NodeData[],
+  overwriteLocal: boolean = true
+): Promise<{ success: boolean; nodes?: NodeData[]; isAuthError?: boolean; error?: string }> {
   try {
     const searchRes = await fetch(
       `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${LIBRARY_FILE_NAME}'%20and%20trashed=false`,
@@ -340,40 +442,41 @@ export async function downloadFromGoogleDrive(
     );
 
     if (searchRes.status === 401) {
-      clearStoredToken();
-      return { success: false, error: 'Google Drive authentication expired.', isAuthError: true };
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
     }
 
     if (!searchRes.ok) {
-      throw new Error(`Search failed: ${searchRes.statusText}`);
+      return { success: false, error: `Search library failed: ${searchRes.statusText}` };
     }
 
     const searchData = await searchRes.json();
-    const file = searchData.files && searchData.files[0];
-
-    if (!file) {
-      return { success: false, error: 'No Google Drive sync file (library.json) found.' };
+    if (!searchData.files || searchData.files.length === 0) {
+      return { success: false, error: 'No existing library.json found in Google Drive appDataFolder' };
     }
 
+    const fileId = searchData.files[0].id;
     const downloadRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
     if (downloadRes.status === 401) {
-      clearStoredToken();
-      return { success: false, error: 'Google Drive authentication expired.', isAuthError: true };
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
     }
 
     if (!downloadRes.ok) {
-      throw new Error(`Download failed: ${downloadRes.statusText}`);
+      return { success: false, error: `Download library failed: ${downloadRes.statusText}` };
     }
 
-    const importedJson = await downloadRes.json();
-    const mergedNodes = importFromWinUIJson(importedJson, existingNodes, null, replaceMode);
-    return { success: true, nodes: mergedNodes };
+    const jsonText = await downloadRes.text();
+    const parsedNodes = importFromWinUIJson(jsonText);
+
+    return {
+      success: true,
+      nodes: parsedNodes,
+    };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to download from Google Drive' };
   }
@@ -383,6 +486,7 @@ export async function downloadFromGoogleDrive(
  * 1:1 Port of WinUI 3 C# GoogleDriveSyncService.cs SyncAsync algorithm:
  * Compares local vs remote sync.json metadata.
  * Only uploads when local is newer; downloads when remote is newer!
+ * Transparently recovers from 401 token expiry with serverless refresh!
  */
 export async function performSmartSync(
   accessToken: string,
@@ -397,6 +501,13 @@ export async function performSmartSync(
   try {
     const remoteMetaRes = await getRemoteMetadataFromDrive(accessToken);
     if (!remoteMetaRes.success) {
+      // Auto-recover on 401 token expiry via serverless refresh token
+      if (remoteMetaRes.isAuthError) {
+        const refreshRes = await refreshAccessTokenViaServer();
+        if (refreshRes.success && refreshRes.accessToken) {
+          return performSmartSync(refreshRes.accessToken, localNodes);
+        }
+      }
       return { success: false, actionTaken: 'noop', isAuthError: remoteMetaRes.isAuthError, error: remoteMetaRes.error };
     }
 
