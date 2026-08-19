@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { RefreshCw, Trophy, RotateCcw, ArrowRight } from 'lucide-react';
 import { NodeData, Difficulty } from '../types/flashcard';
@@ -30,12 +30,19 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [isFinished, setIsFinished] = useState<boolean>(false);
 
+  const dividerKey = selectedDividerNode ? selectedDividerNode.id : '__root__';
+  const lastDividerKeyRef = useRef<string>(dividerKey);
+
   useEffect(() => {
-    setQueue(cardsToRevise);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    setIsFinished(false);
-  }, [cardsToRevise, selectedDividerNode]);
+    // Only reset queue when switching to a different deck/divider or on initial load
+    if (lastDividerKeyRef.current !== dividerKey || queue.length === 0) {
+      lastDividerKeyRef.current = dividerKey;
+      setQueue(cardsToRevise);
+      setCurrentIndex(0);
+      setIsFlipped(false);
+      setIsFinished(false);
+    }
+  }, [dividerKey, cardsToRevise.length]);
 
   useEffect(() => {
     if (isFinished) {
@@ -51,28 +58,42 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
 
   const handleRateDifficulty = useCallback(
     (difficulty: Difficulty) => {
-      if (!currentCardNode || !currentCardNode.card) return;
+      const current = queue[currentIndex];
+      if (!current || !current.card) return;
 
-      const updates = calculateNextReview(currentCardNode.card, difficulty, cardSettings, difficultySettings);
+      const updates = calculateNextReview(current.card, difficulty, cardSettings, difficultySettings);
       const updatedNode: NodeData = {
-        ...currentCardNode,
+        ...current,
         updatedAt: new Date().toISOString(),
         card: {
-          ...currentCardNode.card,
+          ...current.card,
           ...updates,
         },
       };
 
+      // Persist updated card weight to parent library
       onUpdateCard(updatedNode);
+
+      // Update in local queue
+      setQueue((prev) => {
+        const next = [...prev];
+        if (next[currentIndex]) {
+          next[currentIndex] = updatedNode;
+        }
+        return next;
+      });
+
+      // Flip card back to front
       setIsFlipped(false);
 
+      // Advance to next card
       if (currentIndex + 1 < queue.length) {
         setCurrentIndex((prev) => prev + 1);
       } else {
         setIsFinished(true);
       }
     },
-    [currentCardNode, currentIndex, queue.length, cardSettings, difficultySettings, onUpdateCard]
+    [queue, currentIndex, cardSettings, difficultySettings, onUpdateCard]
   );
 
   // Keyboard accelerators matching WinUI XAML
