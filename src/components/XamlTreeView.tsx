@@ -216,14 +216,14 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
             setActiveMenuNodeId(node.id);
           }}
           style={{ paddingLeft: `${Math.max(8, depth * 14 + 6)}px` }}
-          className={`flex items-center justify-between py-2 sm:py-1.5 pr-2 rounded-md text-xs cursor-pointer transition-colors select-none relative min-h-[36px] sm:min-h-[28px] ${
+          className={`flex items-center justify-between h-9 sm:h-8 pr-2 rounded-md text-xs cursor-pointer transition-colors select-none relative shrink-0 ${
             isSelected
               ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500 shadow-sm'
               : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
           } ${isDragOver ? 'bg-indigo-950/80 border border-indigo-500' : ''}`}
         >
           {/* Left item details: Chevron + Icon + Title */}
-          <div className="flex items-center space-x-1.5 flex-1 min-w-0 pr-1">
+          <div className="flex items-center space-x-1.5 flex-1 min-w-0 pr-1 h-full">
             {isFolder ? (
               <button
                 type="button"
@@ -231,12 +231,12 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
                   e.stopPropagation();
                   toggleFolder(node.id);
                 }}
-                className="p-1 -ml-1 text-slate-400 hover:text-slate-200 rounded shrink-0 touch-manipulation"
+                className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-200 rounded shrink-0 touch-manipulation"
               >
                 {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
             ) : (
-              <span className="w-4 shrink-0" />
+              <span className="w-5 h-5 shrink-0" />
             )}
 
             {isFolder ? (
@@ -264,7 +264,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
                 className="bg-slate-950 border border-indigo-500 px-1 py-0.5 rounded text-xs text-slate-100 w-full focus:outline-none"
               />
             ) : (
-              <span className="truncate text-xs sm:text-[13px]">{node.name}</span>
+              <span className="truncate text-xs sm:text-[13px] leading-none">{node.name}</span>
             )}
           </div>
 
