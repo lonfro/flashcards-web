@@ -63,14 +63,14 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
       e.stopPropagation();
 
       const delta = e.deltaY < 0 ? 0.08 : -0.08;
-      setScale((prev) => Math.min(2.2, Math.max(0.5, prev + delta)));
+      setScale((prev) => Math.min(2.5, Math.max(0.4, Number((prev + delta).toFixed(2)))));
     };
 
     containerEl.addEventListener('wheel', handleNativeWheel, { passive: false });
     return () => {
       containerEl.removeEventListener('wheel', handleNativeWheel);
     };
-  }, []);
+  }, [cardNode]);
 
   if (!cardNode || !cardNode.card) {
     return (
@@ -96,7 +96,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex-1 h-full p-3 sm:p-6 flex flex-col justify-between items-center relative select-none overflow-hidden touch-manipulation"
+      className="flex-1 h-full p-3 sm:p-6 flex flex-col justify-between items-center relative select-none overflow-hidden"
     >
       {/* Top Header: Progress Bar & Edit (e) / Zoom Control Buttons */}
       <div className="w-full flex items-center justify-between z-10 min-h-[36px] sm:min-h-[40px]">
