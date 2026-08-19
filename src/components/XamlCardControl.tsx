@@ -158,19 +158,19 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
           transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         >
           {!isFlipped ? (
-            /* Front side */
-            <div className="w-full h-full flex items-center justify-center">
-              <AutoFitViewbox maxWidth={450} maxHeight={268}>
-                <div className="text-slate-100 font-normal text-center select-text max-w-full sm:max-w-[450px] text-sm sm:text-base">
+            /* Front side with auto-fitting scale and large base font (matching WinUI FontSize="30") */
+            <div className="w-full h-full flex items-center justify-center p-2">
+              <AutoFitViewbox maxWidth={460} maxHeight={268}>
+                <div className="text-slate-100 font-medium text-center select-text max-w-full sm:max-w-[460px] text-2xl sm:text-3xl leading-snug">
                   <MarkdownRenderer content={card.front || 'Null'} />
                 </div>
               </AutoFitViewbox>
             </div>
           ) : (
-            /* Back side rendered upside down so it flips right-side-up! */
-            <div className="w-full h-full flex items-center justify-center [transform:rotateX(180deg)]">
-              <AutoFitViewbox maxWidth={450} maxHeight={268}>
-                <div className="text-slate-100 font-normal text-center select-text max-w-full sm:max-w-[450px] text-sm sm:text-base">
+            /* Back side rendered upside down so it flips right-side-up with auto-fitting scale */
+            <div className="w-full h-full flex items-center justify-center [transform:rotateX(180deg)] p-2">
+              <AutoFitViewbox maxWidth={460} maxHeight={268}>
+                <div className="text-slate-100 font-normal text-center select-text max-w-full sm:max-w-[460px] text-lg sm:text-xl leading-relaxed">
                   <MarkdownRenderer content={card.back || 'Null'} />
                 </div>
               </AutoFitViewbox>

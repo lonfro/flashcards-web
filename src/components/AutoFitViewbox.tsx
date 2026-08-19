@@ -7,13 +7,15 @@ interface AutoFitViewboxProps {
   maxHeight?: number;
   maxWidth?: number;
   className?: string;
+  allowUpscale?: boolean;
 }
 
 export const AutoFitViewbox: React.FC<AutoFitViewboxProps> = ({
   children,
-  maxHeight = 260,
-  maxWidth = 450,
+  maxHeight = 268,
+  maxWidth = 460,
   className = '',
+  allowUpscale = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -21,39 +23,66 @@ export const AutoFitViewbox: React.FC<AutoFitViewboxProps> = ({
 
   useLayoutEffect(() => {
     const measure = () => {
-      if (contentRef.current && containerRef.current) {
-        const contentHeight = contentRef.current.scrollHeight;
-        const targetHeight = maxHeight;
+      const container = containerRef.current;
+      const content = contentRef.current;
+      if (!container || !content) return;
 
-        if (contentHeight > targetHeight && targetHeight > 0) {
-          const calculatedScale = targetHeight / contentHeight;
-          setScale(Math.max(0.45, Math.min(1, calculatedScale)));
-        } else {
-          setScale(1);
+      // Available container bounds
+      const containerW = Math.min(maxWidth, container.clientWidth || maxWidth);
+      const containerH = Math.min(maxHeight, container.clientHeight || maxHeight);
+
+      // Natural unscaled content bounds
+      const contentW = content.scrollWidth;
+      const contentH = content.scrollHeight;
+
+      if (contentW > 0 && contentH > 0 && containerW > 0 && containerH > 0) {
+        const scaleX = containerW / contentW;
+        const scaleY = containerH / contentH;
+        let targetScale = Math.min(scaleX, scaleY);
+
+        if (!allowUpscale) {
+          targetScale = Math.min(1.0, targetScale);
         }
+
+        // Clamp scale to a readable minimum (0.35) and maximum
+        const finalScale = Math.max(0.35, Math.min(allowUpscale ? 1.5 : 1.0, targetScale));
+        setScale(Number(finalScale.toFixed(3)));
+      } else {
+        setScale(1);
       }
     };
 
     measure();
-    // Re-measure after small delay for web font/katex rendering
-    const timer = setTimeout(measure, 40);
-    return () => clearTimeout(timer);
-  }, [children, maxHeight]);
+
+    // Re-measure on resize or after web fonts/KaTeX math render
+    const resizeObserver = new ResizeObserver(() => measure());
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
+    if (contentRef.current) resizeObserver.observe(contentRef.current);
+
+    const t1 = setTimeout(measure, 30);
+    const t2 = setTimeout(measure, 150);
+
+    return () => {
+      resizeObserver.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [children, maxHeight, maxWidth, allowUpscale]);
 
   return (
     <div
       ref={containerRef}
       style={{ maxHeight: `${maxHeight}px`, maxWidth: `${maxWidth}px` }}
-      className={`w-full h-full overflow-hidden flex items-center justify-center ${className}`}
+      className={`w-full h-full overflow-hidden flex items-center justify-center relative ${className}`}
     >
       <div
         ref={contentRef}
         style={{
-          transform: scale < 1 ? `scale(${scale})` : 'none',
+          transform: scale !== 1 ? `scale(${scale})` : 'none',
           transformOrigin: 'center center',
           width: '100%',
         }}
-        className="w-full transition-transform duration-200"
+        className="w-full flex flex-col items-center justify-center transition-transform duration-150"
       >
         {children}
       </div>
