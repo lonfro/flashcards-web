@@ -59,8 +59,8 @@ export const XamlCardEditControl: React.FC<XamlCardEditControlProps> = ({
   };
 
   return (
-    <div className="flex-1 h-full p-3 sm:p-8 flex items-center justify-center select-none overflow-y-auto">
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-8 shadow-2xl flex flex-col space-y-4 sm:space-y-6 my-auto">
+    <div className="flex-1 h-full px-4 sm:px-8 pt-4 sm:pt-8 pb-safe pb-8 sm:pb-14 flex items-center justify-center select-none overflow-y-auto">
+      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 shadow-2xl flex flex-col space-y-4 sm:space-y-6 my-auto mb-4 sm:mb-8">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 className="text-sm sm:text-base font-semibold text-slate-100">Edit Flashcard</h3>
           <button
