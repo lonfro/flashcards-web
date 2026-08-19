@@ -111,6 +111,16 @@ export function importFromWinUIJson(
   targetParentId: string | null = null,
   replaceMode: boolean = false
 ): NodeData[] {
+  let parsed = jsonData;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (e) {
+      console.error('Failed to parse JSON string in importFromWinUIJson:', e);
+      return replaceMode ? [] : existingNodes;
+    }
+  }
+
   const newNodes: NodeData[] = replaceMode ? [] : [...existingNodes];
 
   const processItem = (item: any, parentId: string | null) => {
@@ -162,15 +172,15 @@ export function importFromWinUIJson(
   };
 
   const payload =
-    jsonData?.Contents ||
-    jsonData?.contents ||
-    jsonData?.Library ||
-    jsonData?.library ||
-    jsonData;
+    parsed?.Contents ||
+    parsed?.contents ||
+    parsed?.Library ||
+    parsed?.library ||
+    parsed;
 
   if (Array.isArray(payload)) {
     payload.forEach((item) => processItem(item, targetParentId));
-  } else if (typeof payload === 'object') {
+  } else if (typeof payload === 'object' && payload !== null) {
     processItem(payload, targetParentId);
   }
 

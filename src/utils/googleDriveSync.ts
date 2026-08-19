@@ -104,7 +104,7 @@ export function saveStoredLocalMetadata(meta: WinUISyncMetadata): void {
 
 /**
  * Silently refreshes the Google Access Token using the Vercel / Next.js serverless route
- * powered by the permanent HttpOnly refresh_token cookie
+ * if permanent HttpOnly refresh_token cookie exists
  */
 export async function refreshAccessTokenViaServer(): Promise<{
   success: boolean;
@@ -177,7 +177,7 @@ export function loginViaServerlessPopup(
 }
 
 /**
- * Request OAuth 2.0 Access Token (Attempts serverless permanent flow first, falls back to GIS client)
+ * Request OAuth 2.0 Access Token via Google Identity Services
  */
 export function requestGoogleDriveToken(
   clientId: string,
@@ -191,49 +191,41 @@ export function requestGoogleDriveToken(
     localStorage.setItem(STORAGE_CLIENT_ID_KEY, clientId);
   } catch (e) {}
 
-  // 1. Try serverless OAuth popup for permanent offline refresh token
-  loginViaServerlessPopup(
-    clientId,
-    (token) => onSuccess(token),
-    (err) => {
-      // Fallback to client-side Google Identity Services if server credentials are not configured
-      const handleInit = () => {
-        try {
-          const client = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: clientId,
-            scope: DRIVE_SCOPE,
-            prompt: prompt,
-            callback: (response: any) => {
-              if (response.error) {
-                onError(response.error_description || response.error);
-              } else if (response.access_token) {
-                const expiresIn = response.expires_in ? parseInt(response.expires_in, 10) : 3600;
-                saveStoredToken(response.access_token, expiresIn);
-                onSuccess(response.access_token);
-              }
-            },
-          });
-          client.requestAccessToken({ prompt: prompt });
-        } catch (initErr: any) {
-          onError(initErr.message || 'OAuth Client Initialization failed');
-        }
-      };
-
-      if (!(window as any).google?.accounts?.oauth2) {
-        const script = document.createElement('script');
-        script.src = 'https://accounts.google.com/gsi/client';
-        script.async = true;
-        script.defer = true;
-        script.onload = handleInit;
-        script.onerror = () => {
-          onError('Failed to load Google Identity Services SDK.');
-        };
-        document.body.appendChild(script);
-      } else {
-        handleInit();
-      }
+  const handleInit = () => {
+    try {
+      const client = (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: DRIVE_SCOPE,
+        prompt: prompt,
+        callback: (response: any) => {
+          if (response.error) {
+            onError(response.error_description || response.error);
+          } else if (response.access_token) {
+            const expiresIn = response.expires_in ? parseInt(response.expires_in, 10) : 3600;
+            saveStoredToken(response.access_token, expiresIn);
+            onSuccess(response.access_token);
+          }
+        },
+      });
+      client.requestAccessToken({ prompt: prompt });
+    } catch (initErr: any) {
+      onError(initErr.message || 'OAuth Client Initialization failed');
     }
-  );
+  };
+
+  if (!(window as any).google?.accounts?.oauth2) {
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = handleInit;
+    script.onerror = () => {
+      onError('Failed to load Google Identity Services SDK.');
+    };
+    document.body.appendChild(script);
+  } else {
+    handleInit();
+  }
 }
 
 /**
@@ -244,11 +236,13 @@ export async function requestSilentGoogleDriveToken(
   onSuccess: (accessToken: string) => void,
   onError: (err: string) => void
 ): Promise<void> {
-  const serverRefresh = await refreshAccessTokenViaServer();
-  if (serverRefresh.success && serverRefresh.accessToken) {
-    onSuccess(serverRefresh.accessToken);
-    return;
-  }
+  try {
+    const serverRefresh = await refreshAccessTokenViaServer();
+    if (serverRefresh.success && serverRefresh.accessToken) {
+      onSuccess(serverRefresh.accessToken);
+      return;
+    }
+  } catch (e) {}
 
   // Fallback to GIS silent prompt
   requestGoogleDriveToken(clientId, onSuccess, onError, 'none');
@@ -353,7 +347,7 @@ export async function uploadToGoogleDrive(
   nodes: NodeData[]
 ): Promise<{ success: boolean; isAuthError?: boolean; error?: string }> {
   try {
-    const jsonContent = exportToWinUIJson(nodes);
+    const jsonContent = exportToWinUIJson(nodes, null, true);
     const hash = await calculateJsonHash(jsonContent);
     const modifiedAt = new Date().toISOString();
 
@@ -471,7 +465,18 @@ export async function downloadFromGoogleDrive(
     }
 
     const jsonText = await downloadRes.text();
-    const parsedNodes = importFromWinUIJson(jsonText);
+    let parsedJson: any = null;
+    try {
+      parsedJson = JSON.parse(jsonText);
+    } catch (parseErr) {
+      return { success: false, error: 'Downloaded library.json is corrupted or not valid JSON' };
+    }
+
+    const parsedNodes = importFromWinUIJson(parsedJson, currentNodes, null, overwriteLocal);
+
+    if (parsedNodes.length === 0 && jsonText.length > 50) {
+      return { success: false, error: 'Parsed 0 items from downloaded library.json' };
+    }
 
     return {
       success: true,
@@ -486,7 +491,6 @@ export async function downloadFromGoogleDrive(
  * 1:1 Port of WinUI 3 C# GoogleDriveSyncService.cs SyncAsync algorithm:
  * Compares local vs remote sync.json metadata.
  * Only uploads when local is newer; downloads when remote is newer!
- * Transparently recovers from 401 token expiry with serverless refresh!
  */
 export async function performSmartSync(
   accessToken: string,
@@ -501,7 +505,6 @@ export async function performSmartSync(
   try {
     const remoteMetaRes = await getRemoteMetadataFromDrive(accessToken);
     if (!remoteMetaRes.success) {
-      // Auto-recover on 401 token expiry via serverless refresh token
       if (remoteMetaRes.isAuthError) {
         const refreshRes = await refreshAccessTokenViaServer();
         if (refreshRes.success && refreshRes.accessToken) {
@@ -518,7 +521,7 @@ export async function performSmartSync(
     if (!localMetadata) {
       if (remoteMetadata) {
         const downloadRes = await downloadFromGoogleDrive(accessToken, localNodes, true);
-        if (downloadRes.success && downloadRes.nodes) {
+        if (downloadRes.success && downloadRes.nodes && downloadRes.nodes.length > 0) {
           saveStoredLocalMetadata(remoteMetadata);
           return { success: true, actionTaken: 'downloaded', nodes: downloadRes.nodes };
         }
