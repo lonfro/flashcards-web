@@ -178,10 +178,6 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
           const targetNode = visibleNodes[nextIndex];
           if (targetNode) {
             onSelectNode(targetNode);
-            // If it's a divider, automatically expand it so its cards/sub-decks are revealed!
-            if (targetNode.type === 'divider' && !expandedFolderIds[targetNode.id]) {
-              setExpandedFolderIds((prev) => ({ ...prev, [targetNode.id]: true }));
-            }
           }
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
@@ -189,10 +185,6 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
           const targetNode = visibleNodes[prevIndex];
           if (targetNode) {
             onSelectNode(targetNode);
-            // If it's a divider, automatically expand it
-            if (targetNode.type === 'divider' && !expandedFolderIds[targetNode.id]) {
-              setExpandedFolderIds((prev) => ({ ...prev, [targetNode.id]: true }));
-            }
           }
         } else if (e.key === 'ArrowRight') {
           const currentNode = visibleNodes[currentIndex];
