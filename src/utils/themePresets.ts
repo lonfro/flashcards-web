@@ -13,6 +13,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#6366f1',
     accentHover: '#4f46e5',
     accentText: '#ffffff',
+    folderIconColor: '#f59e0b',
+    cardIconColor: '#818cf8',
     scrollbarThumb: '#334155',
     scrollbarTrack: '#090d16',
   },
@@ -28,6 +30,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#3b82f6',
     accentHover: '#2563eb',
     accentText: '#ffffff',
+    folderIconColor: '#fbbf24',
+    cardIconColor: '#60a5fa',
     scrollbarThumb: '#404040',
     scrollbarTrack: '#000000',
   },
@@ -43,6 +47,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#cba6f7',
     accentHover: '#b4befe',
     accentText: '#11111b',
+    folderIconColor: '#fab387',
+    cardIconColor: '#cba6f7',
     scrollbarThumb: '#585b70',
     scrollbarTrack: '#11111b',
   },
@@ -58,6 +64,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#8aadf4',
     accentHover: '#7dc4e4',
     accentText: '#181926',
+    folderIconColor: '#f5a97f',
+    cardIconColor: '#8aadf4',
     scrollbarThumb: '#5b6078',
     scrollbarTrack: '#181926',
   },
@@ -73,6 +81,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#2563eb',
     accentHover: '#1d4ed8',
     accentText: '#ffffff',
+    folderIconColor: '#d97706',
+    cardIconColor: '#2563eb',
     scrollbarThumb: '#cbd5e1',
     scrollbarTrack: '#f1f5f9',
   },
@@ -88,6 +98,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#a855f7',
     accentHover: '#9333ea',
     accentText: '#ffffff',
+    folderIconColor: '#f43f5e',
+    cardIconColor: '#c084fc',
     scrollbarThumb: '#581c87',
     scrollbarTrack: '#0d0714',
   },
@@ -103,6 +115,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#10b981',
     accentHover: '#059669',
     accentText: '#ffffff',
+    folderIconColor: '#34d399',
+    cardIconColor: '#10b981',
     scrollbarThumb: '#047857',
     scrollbarTrack: '#02120a',
   },
@@ -118,6 +132,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#f59e0b',
     accentHover: '#d97706',
     accentText: '#ffffff',
+    folderIconColor: '#fb923c',
+    cardIconColor: '#f59e0b',
     scrollbarThumb: '#b45309',
     scrollbarTrack: '#180c04',
   },
@@ -133,6 +149,8 @@ export const PRESET_THEMES: AppTheme[] = [
     accent: '#06b6d4',
     accentHover: '#0891b2',
     accentText: '#ffffff',
+    folderIconColor: '#38bdf8',
+    cardIconColor: '#22d3ee',
     scrollbarThumb: '#0e7490',
     scrollbarTrack: '#08131e',
   },
@@ -153,6 +171,8 @@ export function applyTheme(theme: AppTheme): void {
   root.style.setProperty('--accent-main', theme.accent);
   root.style.setProperty('--accent-hover', theme.accentHover);
   root.style.setProperty('--accent-text', theme.accentText);
+  root.style.setProperty('--color-folder-icon', theme.folderIconColor || '#f59e0b');
+  root.style.setProperty('--color-card-icon', theme.cardIconColor || theme.accent || '#818cf8');
   root.style.setProperty('--scrollbar-thumb', theme.scrollbarThumb);
   root.style.setProperty('--scrollbar-track', theme.scrollbarTrack);
 

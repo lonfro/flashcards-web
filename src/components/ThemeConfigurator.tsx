@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Palette, Download, Upload, Copy, Check, Sparkles, RefreshCcw } from 'lucide-react';
+import { Palette, Download, Upload, Copy, Check, Sparkles, Folder, FileText } from 'lucide-react';
 import { AppTheme } from '../types/theme';
 import { PRESET_THEMES, applyTheme, getStoredTheme } from '../utils/themePresets';
 
@@ -24,6 +24,8 @@ export const ThemeConfigurator: React.FC = () => {
     accent: '#6366f1',
     accentHover: '#4f46e5',
     accentText: '#ffffff',
+    folderIconColor: '#f59e0b',
+    cardIconColor: '#818cf8',
     scrollbarThumb: '#334155',
     scrollbarTrack: '#090d16',
   });
@@ -141,6 +143,9 @@ export const ThemeConfigurator: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {PRESET_THEMES.map((theme) => {
             const isSelected = activeTheme.id === theme.id;
+            const folderCol = theme.folderIconColor || '#f59e0b';
+            const cardCol = theme.cardIconColor || theme.accent || '#818cf8';
+
             return (
               <button
                 key={theme.id}
@@ -154,14 +159,12 @@ export const ThemeConfigurator: React.FC = () => {
                 {/* Mini Preview Box */}
                 <div
                   style={{ background: theme.background, borderColor: theme.border }}
-                  className="w-full h-16 rounded-lg p-2 border flex flex-col justify-between"
+                  className="w-full h-20 rounded-lg p-2 border flex flex-col justify-between"
                 >
                   <div className="flex items-center justify-between">
-                    <div
-                      style={{ background: theme.surface, color: theme.foreground }}
-                      className="text-[9px] px-1.5 py-0.5 rounded font-mono"
-                    >
-                      Sidebar
+                    <div className="flex items-center space-x-1.5">
+                      <Folder size={12} style={{ color: folderCol }} />
+                      <FileText size={12} style={{ color: cardCol }} />
                     </div>
                     <div
                       style={{ background: theme.accent }}
@@ -171,9 +174,10 @@ export const ThemeConfigurator: React.FC = () => {
 
                   <div
                     style={{ background: theme.cardBg, borderColor: theme.border, color: theme.foreground }}
-                    className="text-[9px] px-2 py-1 rounded border font-semibold truncate"
+                    className="text-[9px] px-2 py-1 rounded border font-semibold flex items-center justify-between"
                   >
-                    Card Preview
+                    <span className="truncate">Card Preview</span>
+                    <span style={{ color: cardCol }} className="text-[10px] font-mono">✦</span>
                   </div>
                 </div>
 
@@ -201,6 +205,40 @@ export const ThemeConfigurator: React.FC = () => {
                 onChange={(e) => handleCustomColorChange('name', e.target.value)}
                 placeholder="My Awesome Theme"
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 text-xs focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Folder Symbol Color */}
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Folder size={16} style={{ color: customTheme.folderIconColor || '#f59e0b' }} />
+                <div>
+                  <label className="text-xs font-medium text-slate-200 block">Folder Symbol Color</label>
+                  <span className="text-[10px] font-mono text-slate-500">{customTheme.folderIconColor || '#f59e0b'}</span>
+                </div>
+              </div>
+              <input
+                type="color"
+                value={customTheme.folderIconColor || '#f59e0b'}
+                onChange={(e) => handleCustomColorChange('folderIconColor', e.target.value)}
+                className="w-8 h-8 rounded border-none cursor-pointer bg-transparent"
+              />
+            </div>
+
+            {/* Flashcard Symbol Color */}
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <FileText size={16} style={{ color: customTheme.cardIconColor || '#818cf8' }} />
+                <div>
+                  <label className="text-xs font-medium text-slate-200 block">Flashcard Symbol Color</label>
+                  <span className="text-[10px] font-mono text-slate-500">{customTheme.cardIconColor || '#818cf8'}</span>
+                </div>
+              </div>
+              <input
+                type="color"
+                value={customTheme.cardIconColor || '#818cf8'}
+                onChange={(e) => handleCustomColorChange('cardIconColor', e.target.value)}
+                className="w-8 h-8 rounded border-none cursor-pointer bg-transparent"
               />
             </div>
 

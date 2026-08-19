@@ -241,12 +241,12 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
 
             {isFolder ? (
               isExpanded ? (
-                <FolderOpen size={15} className="text-amber-400 shrink-0" />
+                <FolderOpen size={15} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} className="shrink-0" />
               ) : (
-                <Folder size={15} className="text-amber-400 shrink-0" />
+                <Folder size={15} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} className="shrink-0" />
               )
             ) : (
-              <FileText size={15} className="text-indigo-400 shrink-0" />
+              <FileText size={15} style={{ color: 'var(--color-card-icon, #818cf8)' }} className="shrink-0" />
             )}
 
             {isEditing ? (
@@ -308,7 +308,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
                   >
-                    <FilePlus size={14} className="text-indigo-400" />
+                    <FilePlus size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} />
                     <span>Add cards</span>
                   </button>
                   <button
@@ -318,7 +318,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
                   >
-                    <FolderPlus size={14} className="text-amber-400" />
+                    <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
                     <span>Add new divider</span>
                   </button>
                 </div>
@@ -527,7 +527,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
           onClick={() => onAddDivider(null)}
           className="flex-1 py-2 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center justify-center space-x-1 border border-slate-700 touch-manipulation"
         >
-          <FolderPlus size={14} className="text-amber-400" />
+          <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
           <span>+ Deck</span>
         </button>
         <button
@@ -544,17 +544,21 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
             setIsRootMenuOpen(!isRootMenuOpen);
           }}
           className="py-2 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center justify-center border border-slate-700 touch-manipulation"
-          title="More options"
+          title="Decks & Library Actions"
         >
           <MoreVertical size={14} />
         </button>
       </div>
 
-      {/* Root Tree Context Menu Flyout */}
+      {/* Root / Global Context Menu Flyout */}
       {isRootMenuOpen && (
         <div
-          style={{ top: `${rootMenuPos.y}px`, left: `${rootMenuPos.x}px` }}
-          className="fixed z-50 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
+          style={{
+            position: 'fixed',
+            left: `${Math.min(rootMenuPos.x, window.innerWidth - 250)}px`,
+            top: `${Math.min(rootMenuPos.y, window.innerHeight - 280)}px`,
+          }}
+          className="z-50 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="py-1">
@@ -565,7 +569,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               }}
               className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
             >
-              <FilePlus size={14} className="text-indigo-400" />
+              <FilePlus size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} />
               <span>Add cards (Root)</span>
             </button>
             <button
@@ -575,7 +579,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               }}
               className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
             >
-              <FolderPlus size={14} className="text-amber-400" />
+              <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
               <span>Add new deck</span>
             </button>
           </div>

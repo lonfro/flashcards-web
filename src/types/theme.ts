@@ -11,6 +11,8 @@ export interface AppTheme {
   accent: string;           // Brand accent color
   accentHover: string;      // Accent hover color
   accentText: string;       // Text color on top of accent
+  folderIconColor?: string; // Folder symbol color in tree & UI
+  cardIconColor?: string;   // Flashcard symbol color in tree & UI
   scrollbarThumb: string;   // Scrollbar thumb color
   scrollbarTrack: string;   // Scrollbar track color
 }
