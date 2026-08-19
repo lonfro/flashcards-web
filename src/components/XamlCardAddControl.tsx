@@ -14,12 +14,12 @@ export const XamlCardAddControl: React.FC<XamlCardAddControlProps> = ({ onAddCar
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-focus frontTextBox on mount matching WinUI CardAddControl
+  // Auto-focus frontTextBox on mount
   useEffect(() => {
     frontInputRef.current?.focus();
   }, []);
 
-  // Escape key to finish/done matching UserControl_PreviewKeyDown
+  // Escape key to finish/done
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -31,7 +31,6 @@ export const XamlCardAddControl: React.FC<XamlCardAddControlProps> = ({ onAddCar
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onDone]);
 
-  // Front_TextBox_KeyDown: Enter -> move focus to backTextBox
   const handleFrontKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -39,7 +38,6 @@ export const XamlCardAddControl: React.FC<XamlCardAddControlProps> = ({ onAddCar
     }
   };
 
-  // Back_TextBox_KeyDown: Tab -> add card, clear input fields, auto-focus frontTextBox
   const handleBackKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -57,46 +55,66 @@ export const XamlCardAddControl: React.FC<XamlCardAddControlProps> = ({ onAddCar
   };
 
   return (
-    <div className="flex-1 h-full p-8 flex items-center justify-center select-none">
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-2xl flex flex-col space-y-6">
-        {/* Row 0: frontTextBox (Matching CardAddControl.xaml line 30) */}
-        <input
-          ref={frontInputRef}
-          type="text"
-          value={front}
-          onChange={(e) => setFront(e.target.value)}
-          onKeyDown={handleFrontKeyDown}
-          placeholder="Front question..."
-          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-2xl font-medium text-slate-100 focus:outline-none focus:border-indigo-500"
-        />
+    <div className="flex-1 h-full p-3 sm:p-8 flex items-center justify-center select-none overflow-y-auto">
+      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-8 shadow-2xl flex flex-col space-y-4 sm:space-y-6 my-auto">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h3 className="text-sm sm:text-base font-semibold text-slate-100">Add New Flashcard</h3>
+          <button
+            onClick={onDone}
+            className="text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1 rounded bg-slate-800/60"
+          >
+            Done
+          </button>
+        </div>
 
-        {/* Row 1: backTextBox (Matching CardAddControl.xaml line 36) */}
-        <textarea
-          ref={backTextAreaRef}
-          rows={8}
-          value={back}
-          onChange={(e) => setBack(e.target.value)}
-          onKeyDown={handleBackKeyDown}
-          placeholder="Back answer in Markdown..."
-          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4 text-xl font-mono text-slate-100 focus:outline-none focus:border-indigo-500 resize-none flex-1"
-        />
+        {/* Row 0: frontTextBox */}
+        <div className="space-y-1">
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Front (Question / Prompt)
+          </label>
+          <input
+            ref={frontInputRef}
+            type="text"
+            value={front}
+            onChange={(e) => setFront(e.target.value)}
+            onKeyDown={handleFrontKeyDown}
+            placeholder="Front question..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-base sm:text-2xl font-medium text-slate-100 focus:outline-none focus:border-indigo-500"
+          />
+        </div>
 
-        {/* Row 2: Bottom Button Row: Add (Tab) & Done (Esc) (Matching CardAddControl.xaml line 43) */}
-        <div className="flex items-center justify-end space-x-4 pt-2">
+        {/* Row 1: backTextBox */}
+        <div className="space-y-1 flex-1 flex flex-col">
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            Back (Answer / Markdown / LaTeX)
+          </label>
+          <textarea
+            ref={backTextAreaRef}
+            rows={6}
+            value={back}
+            onChange={(e) => setBack(e.target.value)}
+            onKeyDown={handleBackKeyDown}
+            placeholder="Back answer in Markdown / LaTeX..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 sm:p-4 text-sm sm:text-xl font-mono text-slate-100 focus:outline-none focus:border-indigo-500 resize-none flex-1 min-h-[140px]"
+          />
+        </div>
+
+        {/* Row 2: Bottom Button Row: Add & Done */}
+        <div className="flex items-center justify-end space-x-3 pt-2">
           <button
             onClick={handleAddCurrent}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-lg rounded-lg transition-all shadow-lg shadow-indigo-600/30 flex items-center space-x-2"
+            className="flex-1 sm:flex-initial px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm sm:text-lg rounded-lg transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 touch-manipulation"
           >
-            <span>Add</span>
-            <span className="text-xs text-indigo-200 font-mono font-normal">(Tab)</span>
+            <span>Add Card</span>
+            <span className="text-xs text-indigo-200 font-mono font-normal hidden sm:inline">(Tab)</span>
           </button>
 
           <button
             onClick={onDone}
-            className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-lg rounded-lg transition-colors border border-slate-700 flex items-center space-x-2"
+            className="flex-1 sm:flex-initial px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-sm sm:text-lg rounded-lg transition-colors border border-slate-700 flex items-center justify-center space-x-2 touch-manipulation"
           >
             <span>Done</span>
-            <span className="text-xs text-slate-400 font-mono font-normal">(Esc)</span>
+            <span className="text-xs text-slate-400 font-mono font-normal hidden sm:inline">(Esc)</span>
           </button>
         </div>
       </div>

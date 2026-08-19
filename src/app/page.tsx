@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
 import {
   getStoredNodes,
@@ -52,6 +53,9 @@ export default function HomePage() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [activePage, setActivePage] = useState<ActivePage>('FlashcardsPage');
   const [historyStack, setHistoryStack] = useState<ActivePage[]>([]);
+
+  // Mobile View Switcher: 'tree' (decks tree view) | 'card' (single card view)
+  const [mobileView, setMobileView] = useState<'tree' | 'card'>('tree');
 
   // Selected Node (Divider or Card)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -151,57 +155,44 @@ export default function HomePage() {
                   setNodes(sRes.nodes);
                   saveStoredNodes(sRes.nodes);
                 }
+                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setLastSyncTime(timeStr);
+                try {
+                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
+                } catch (e) {}
                 setSyncState('synced');
               });
             },
             () => {
+              clearStoredToken();
               setAccessToken(null);
               setSyncState('unauthenticated');
             }
           );
         } else {
-          setSyncState('synced');
-        }
-      });
-    } else if (savedClientId) {
-      setSyncState('syncing');
-      requestSilentGoogleDriveToken(
-        savedClientId,
-        (newToken) => {
-          setAccessToken(newToken);
-          performSmartSync(newToken, data).then((sRes) => {
-            if (sRes.success && sRes.nodes) {
-              setNodes(sRes.nodes);
-              saveStoredNodes(sRes.nodes);
-            }
-            setSyncState('synced');
-          });
-        },
-        () => {
           setSyncState('unauthenticated');
         }
-      );
-    } else {
-      setSyncState('unauthenticated');
+      });
     }
   }, []);
 
-  // 1:1 Port of WeightDecayService.cs background decay engine
+  // Card Weight Decay Background Engine
   useEffect(() => {
-    if (nodes.length === 0) return;
+    if (!cardSettings.decayDurationHours || cardSettings.decayWeight <= 0) return;
+
     const decayResult = applyWeightDecay(nodes, cardSettings);
     if (decayResult) {
       setNodes(decayResult.updatedNodes);
       saveStoredNodes(decayResult.updatedNodes);
-      const updatedCS = { ...cardSettings, lastDecayTime: decayResult.newLastDecayTime };
-      setCardSettings(updatedCS);
+      const updatedSettings = { ...cardSettings, lastDecayTime: decayResult.newLastDecayTime };
+      setCardSettings(updatedSettings);
       try {
-        localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(updatedCS));
+        localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(updatedSettings));
       } catch (e) {}
     }
   }, [nodes, cardSettings]);
 
-  // Background Auto-Refresh (Polling Loop using performSmartSync 1:1 with WinUI SyncService)
+  // Background Auto-Refresh
   useEffect(() => {
     if (!autoRefreshEnabled || !accessToken) return;
 
@@ -334,7 +325,7 @@ export default function HomePage() {
     }
   };
 
-  // Google Drive Authentication Handlers (1:1 WinUI Smart Sync on Connect)
+  // Google Drive Authentication Handlers
   const handleConnectDrive = (clientId: string) => {
     setSyncState('syncing');
     requestGoogleDriveToken(
@@ -355,6 +346,9 @@ export default function HomePage() {
               localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
             } catch (e) {}
             setSyncState('synced');
+          } else if (res.isAuthError) {
+            setAccessToken(null);
+            setSyncState('unauthenticated');
           } else {
             setSyncState('error');
           }
@@ -413,7 +407,7 @@ export default function HomePage() {
     });
   };
 
-  // Full Manual Sync Trigger on TitleBar Sync Badge Click (1:1 WinUI Smart Sync)
+  // Full Manual Sync Trigger on TitleBar Sync Badge Click
   const handleFullManualSync = () => {
     if (!accessToken) return;
     setSyncState('syncing');
@@ -445,14 +439,14 @@ export default function HomePage() {
     return nodes.find((n) => n.id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
 
-  // Selected card object (ONLY if selected node is an actual card)
+  // Selected card object
   const selectedCardNode = useMemo(() => {
     if (!selectedNode) return null;
-    if (selectedNode.type === 'card') return selectedNode;
+    if (selectedNode.type === 'card' && selectedNode.card) return selectedNode;
     return null;
   }, [selectedNode]);
 
-  // Revision divider & cards
+  // Revision Cards selection
   const revisionDividerNode = useMemo(() => {
     if (!revisionDividerId) return null;
     return nodes.find((n) => n.id === revisionDividerId) || null;
@@ -462,20 +456,20 @@ export default function HomePage() {
     return getAllCardsInDeck(nodes, revisionDividerId);
   }, [nodes, revisionDividerId]);
 
-  // Navigation
+  // Navigation handlers
   const handleNavigate = (page: ActivePage) => {
-    if (page !== activePage) {
-      setHistoryStack((prev) => [...prev, activePage]);
-      setActivePage(page);
-    }
+    if (page === activePage) return;
+    setHistoryStack((prev) => [...prev, activePage]);
+    setActivePage(page);
+    setIsCardFlipped(false);
   };
 
   const handleGoBack = () => {
-    if (historyStack.length > 0) {
-      const prev = historyStack[historyStack.length - 1];
-      setHistoryStack((stack) => stack.slice(0, -1));
-      setActivePage(prev);
-    }
+    if (historyStack.length === 0) return;
+    const prevPage = historyStack[historyStack.length - 1];
+    setHistoryStack((prev) => prev.slice(0, prev.length - 1));
+    setActivePage(prevPage);
+    setIsCardFlipped(false);
   };
 
   // TreeView Item Selection
@@ -483,16 +477,20 @@ export default function HomePage() {
     setSelectedNodeId(node.id);
     setIsCardFlipped(false);
     setRightViewMode('CardView');
+    if (node.type === 'card') {
+      setMobileView('card');
+    }
   };
 
-  // Trigger Add Card mode (Explicit parentId support)
+  // Trigger Add Card mode
   const handleTriggerAddCard = (parentId: string | null) => {
     setAddCardParentId(parentId);
     if (parentId) setSelectedNodeId(parentId);
     setRightViewMode('CardAddView');
+    setMobileView('card');
   };
 
-  // Save new card with DEFAULT CARD WEIGHT (cardSettings.defaultWeight = 20.0) 1:1 with WinUI CardSettings.cs
+  // Save new card
   const handleSaveNewCard = (front: string, back: string) => {
     const newId = `node-card-${Date.now()}`;
     const targetParent = addCardParentId !== undefined ? addCardParentId : (selectedNode?.type === 'divider' ? selectedNode.id : null);
@@ -509,7 +507,7 @@ export default function HomePage() {
         nodeId: newId,
         front,
         back,
-        weight: cardSettings.defaultWeight, // <--- WinUI defaultWeight = 20.0
+        weight: cardSettings.defaultWeight,
         easeFactor: 2.5,
         interval: 1,
         reviewCount: 0,
@@ -517,6 +515,8 @@ export default function HomePage() {
     };
     handleUpdateNodes([...nodes, newCardNode]);
     setSelectedNodeId(newId);
+    setRightViewMode('CardView');
+    setMobileView('card');
   };
 
   const handleAddDivider = (parentId: string | null) => {
@@ -543,6 +543,7 @@ export default function HomePage() {
   const handleStartEditCard = (cardNode: NodeData) => {
     setEditingCardNode(cardNode);
     setRightViewMode('CardEditView');
+    setMobileView('card');
   };
 
   const handleSaveCardEdit = (front: string, back: string) => {
@@ -583,6 +584,7 @@ export default function HomePage() {
     handleUpdateNodes(filtered);
     if (selectedNodeId && idsToDelete.has(selectedNodeId)) {
       setSelectedNodeId(null);
+      setMobileView('tree');
     }
   };
 
@@ -615,7 +617,7 @@ export default function HomePage() {
     handleUpdateNodes(updated);
   };
 
-  // Export / Import (1:1 WinUI polymorphic C# JSON schema)
+  // Export / Import
   const handleExportAll = (dividerId?: string) => {
     const jsonStr = exportToWinUIJson(nodes, typeof dividerId === 'string' ? dividerId : null);
     const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -652,6 +654,7 @@ export default function HomePage() {
       const sample = resetToSampleNodes();
       handleUpdateNodes(sample);
       setSelectedNodeId(null);
+      setMobileView('tree');
     }
   };
 
@@ -705,7 +708,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      {/* WinUI 3 TitleBar & Navigation with Auto-Sync Status Badge */}
+      {/* WinUI 3 TitleBar & Navigation with Auto-Sync Status Badge & Mobile View Switcher */}
       <WinUITitleBar
         activePage={activePage}
         onNavigate={handleNavigate}
@@ -714,47 +717,75 @@ export default function HomePage() {
         syncState={syncState}
         lastSyncTime={lastSyncTime}
         onManualSync={handleFullManualSync}
+        mobileView={mobileView}
+        onToggleMobileView={() => setMobileView((prev) => (prev === 'tree' ? 'card' : 'tree'))}
       />
 
       {/* Main Content Pages */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {activePage === 'FlashcardsPage' && (
-          <div className="flex-1 flex h-full overflow-hidden">
-            {/* Left Resizable TreeView Pane */}
-            <XamlTreeView
-              nodes={nodes}
-              selectedNodeId={selectedNodeId}
-              width={sidebarWidth}
-              onSelectNode={handleSelectNode}
-              onAddCard={handleTriggerAddCard}
-              onAddDivider={handleAddDivider}
-              onReviseDivider={(node) => {
-                setRevisionDividerId(node ? node.id : null);
-                handleNavigate('RevisionPage');
-              }}
-              onEditCard={(node) => {
-                setSelectedNodeId(node.id);
-                handleStartEditCard(node);
-              }}
-              onRenameNode={handleRenameNode}
-              onDeleteNode={handleDeleteNode}
-              onResetWeights={handleResetWeights}
-              onExportDivider={handleExportAll}
-              onImportDivider={handleImportAll}
-              onMoveNode={handleMoveNode}
-              onSortNodes={handleSortNodes}
-            />
+          <div className="flex-1 flex h-full overflow-hidden relative">
+            {/* Left TreeView Pane (Full screen on mobile when mobileView === 'tree', sidebar on desktop) */}
+            <div
+              className={`h-full ${
+                mobileView === 'tree' ? 'flex w-full' : 'hidden'
+              } md:flex md:w-auto shrink-0 z-10`}
+            >
+              <XamlTreeView
+                nodes={nodes}
+                selectedNodeId={selectedNodeId}
+                width={sidebarWidth}
+                onSelectNode={handleSelectNode}
+                onAddCard={handleTriggerAddCard}
+                onAddDivider={handleAddDivider}
+                onReviseDivider={(node) => {
+                  setRevisionDividerId(node ? node.id : null);
+                  handleNavigate('RevisionPage');
+                }}
+                onEditCard={(node) => {
+                  setSelectedNodeId(node.id);
+                  handleStartEditCard(node);
+                }}
+                onRenameNode={handleRenameNode}
+                onDeleteNode={handleDeleteNode}
+                onResetWeights={handleResetWeights}
+                onExportDivider={handleExportAll}
+                onImportDivider={handleImportAll}
+                onMoveNode={handleMoveNode}
+                onSortNodes={handleSortNodes}
+              />
+            </div>
 
-            {/* WinUI 3 GridSplitter Column */}
-            <XamlGridSplitter
-              width={sidebarWidth}
-              onWidthChange={handleSidebarWidthChange}
-              minWidth={180}
-              maxWidth={500}
-            />
+            {/* WinUI 3 GridSplitter Column (Hidden on mobile) */}
+            <div className="hidden md:block">
+              <XamlGridSplitter
+                width={sidebarWidth}
+                onWidthChange={handleSidebarWidthChange}
+                minWidth={180}
+                maxWidth={500}
+              />
+            </div>
 
             {/* Right Pane: CardControl, CardEditControl, or CardAddControl */}
-            <div className="flex-1 h-full bg-slate-950 flex flex-col overflow-hidden relative">
+            <div
+              className={`flex-1 h-full bg-slate-950 flex flex-col overflow-hidden relative ${
+                mobileView === 'card' ? 'flex w-full' : 'hidden md:flex'
+              }`}
+            >
+              {/* Mobile Top Header Banner when viewing a card */}
+              <div className="md:hidden flex items-center justify-between px-3 py-2 bg-slate-900/90 border-b border-slate-800 shrink-0">
+                <button
+                  onClick={() => setMobileView('tree')}
+                  className="flex items-center space-x-1 text-xs text-indigo-300 font-medium py-1 px-2.5 bg-indigo-950/80 border border-indigo-500/40 rounded-lg touch-manipulation"
+                >
+                  <ChevronLeft size={14} />
+                  <span>Decks List</span>
+                </button>
+                <span className="text-xs font-semibold text-slate-300 truncate max-w-[180px]">
+                  {selectedNode ? selectedNode.name : 'Card View'}
+                </span>
+              </div>
+
               {rightViewMode === 'CardAddView' ? (
                 <XamlCardAddControl
                   onAddCard={handleSaveNewCard}
