@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { RegisterServiceWorker } from "../components/RegisterServiceWorker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,9 +52,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-touch-fullscreen" content="yes" />
+        {/* Synchronous script to immediately unregister any stale Service Worker in iOS Safari */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    for (var r of regs) {
+                      r.unregister();
+                    }
+                  });
+                }
+                if (typeof window !== 'undefined' && 'caches' in window) {
+                  caches.keys().then(function(keys) {
+                    for (var k of keys) {
+                      caches.delete(k);
+                    }
+                  });
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col overflow-hidden select-none bg-slate-950 text-slate-100">
-        <RegisterServiceWorker />
         {children}
       </body>
     </html>
