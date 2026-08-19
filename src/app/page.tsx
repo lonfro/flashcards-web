@@ -137,6 +137,8 @@ export default function HomePage() {
           if (res.nodes) {
             setNodes(res.nodes);
             saveStoredNodes(res.nodes);
+            const firstCard = res.nodes.find((n) => n.type === 'card');
+            setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
           }
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
@@ -154,6 +156,8 @@ export default function HomePage() {
                 if (sRes.success && sRes.nodes) {
                   setNodes(sRes.nodes);
                   saveStoredNodes(sRes.nodes);
+                  const firstCard = sRes.nodes.find((n) => n.type === 'card');
+                  setSelectedNodeId(firstCard ? firstCard.id : (sRes.nodes[0]?.id || null));
                 }
                 const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 setLastSyncTime(timeStr);
@@ -391,7 +395,16 @@ export default function HomePage() {
     setSyncState('syncing');
     downloadFromGoogleDrive(accessToken, nodes, true).then((res) => {
       if (res.success && res.nodes) {
-        handleUpdateNodes(res.nodes);
+        setNodes(res.nodes);
+        saveStoredNodes(res.nodes);
+        if (!selectedNodeId || !res.nodes.some((n) => n.id === selectedNodeId)) {
+          const firstCard = res.nodes.find((n) => n.type === 'card');
+          setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
+        }
+        const jsonStr = exportToWinUIJson(res.nodes, null, true);
+        calculateJsonHash(jsonStr).then((hash) => {
+          saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
+        });
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLastSyncTime(timeStr);
         try {
@@ -417,6 +430,10 @@ export default function HomePage() {
         if (res.nodes) {
           setNodes(res.nodes);
           saveStoredNodes(res.nodes);
+          if (!selectedNodeId || !res.nodes.some((n) => n.id === selectedNodeId)) {
+            const firstCard = res.nodes.find((n) => n.type === 'card');
+            setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
+          }
         }
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLastSyncTime(timeStr);
