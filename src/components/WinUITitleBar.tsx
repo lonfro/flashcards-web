@@ -42,31 +42,38 @@ export const WinUITitleBar: React.FC<WinUITitleBarProps> = ({
 }) => {
   return (
     <header className="w-full bg-slate-900/95 border-b border-slate-800 text-slate-100 flex flex-col backdrop-blur-md select-none shrink-0 z-30 pt-safe pl-safe pr-safe">
-      {/* Top Window TitleBar */}
+      {/* Top Window TitleBar (1:1 WinUI 3 Window TitleBar) */}
       <div className="h-9 px-2 sm:px-3 flex items-center justify-between border-b border-slate-800/60 bg-slate-950/80 text-xs">
         <div className="flex items-center space-x-1.5 sm:space-x-2">
-          {/* Mobile Back / Decks List Button (shown on mobile in Card view) */}
-          {activePage === 'FlashcardsPage' && mobileView === 'card' && onToggleMobileView ? (
+          {/* WinUI 3 TitleBar Back Button */}
+          <button
+            onClick={() => {
+              if (activePage === 'FlashcardsPage' && mobileView === 'card' && onToggleMobileView) {
+                onToggleMobileView();
+              } else if (canGoBack) {
+                onGoBack();
+              }
+            }}
+            disabled={!canGoBack && !(activePage === 'FlashcardsPage' && mobileView === 'card')}
+            className={`p-1 rounded transition-colors flex items-center justify-center ${
+              canGoBack || (activePage === 'FlashcardsPage' && mobileView === 'card')
+                ? 'text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer active:scale-95'
+                : 'text-slate-600 cursor-not-allowed opacity-40'
+            }`}
+            title="Back"
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          {/* Mobile Decks toggle pill if in card view on mobile */}
+          {activePage === 'FlashcardsPage' && mobileView === 'card' && onToggleMobileView && (
             <button
               onClick={onToggleMobileView}
               className="md:hidden flex items-center space-x-1 px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-900 transition-colors text-[11px] font-medium"
               title="Back to Decks Tree"
             >
-              <Menu size={13} />
+              <Menu size={12} />
               <span>Decks</span>
-            </button>
-          ) : (
-            <button
-              onClick={onGoBack}
-              disabled={!canGoBack}
-              className={`p-1 rounded transition-colors ${
-                canGoBack
-                  ? 'text-slate-200 hover:bg-slate-800 hover:text-white'
-                  : 'text-slate-600 cursor-not-allowed'
-              }`}
-              title="Back"
-            >
-              <ChevronLeft size={16} />
             </button>
           )}
 
