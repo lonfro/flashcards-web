@@ -19,6 +19,7 @@ import {
   Upload,
   ArrowUpDown,
   Layers,
+  X,
 } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
 
@@ -140,6 +141,25 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
       ...prev,
       [folderId]: !prev[folderId],
     }));
+  };
+
+  // Reveals the search result in the TreeView by expanding all ancestor folders, clearing search, and selecting it
+  const expandAncestorsAndSelect = (node: NodeData) => {
+    const folderIdsToExpand: Record<string, boolean> = {};
+    let currentParentId = node.parentId;
+    while (currentParentId) {
+      folderIdsToExpand[currentParentId] = true;
+      const parentNode = nodes.find((n) => n.id === currentParentId);
+      currentParentId = parentNode ? parentNode.parentId : null;
+    }
+
+    setExpandedFolderIds((prev) => ({
+      ...prev,
+      ...folderIdsToExpand,
+    }));
+
+    setSearchQuery('');
+    onSelectNode(node);
   };
 
   // Compute flat ordered list of currently visible nodes in the tree
@@ -545,9 +565,18 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search flashcards..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-3 py-2 sm:py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-2 sm:py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+              title="Clear search"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -555,8 +584,14 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
       <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 touch-pan-y">
         {searchQuery.trim() ? (
           <div className="space-y-1">
-            <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              Search Results ({searchResults.length})
+            <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Search Results ({searchResults.length})</span>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-[10px] text-indigo-400 hover:underline cursor-pointer lowercase font-normal"
+              >
+                close
+              </button>
             </div>
             {searchResults.length === 0 ? (
               <div className="px-2 py-6 text-xs text-slate-500 italic text-center">
@@ -566,14 +601,14 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               searchResults.map((cardNode) => (
                 <div
                   key={cardNode.id}
-                  onClick={() => onSelectNode(cardNode)}
-                  className={`flex items-center space-x-2 py-2.5 sm:py-1.5 px-2.5 rounded text-xs cursor-pointer ${
+                  onClick={() => expandAncestorsAndSelect(cardNode)}
+                  className={`flex items-center space-x-2 py-2.5 sm:py-1.5 px-2.5 rounded text-xs cursor-pointer transition-colors ${
                     selectedNodeId === cardNode.id
                       ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500'
                       : 'text-slate-300 hover:bg-slate-800/60'
                   }`}
                 >
-                  <FileText size={14} className="text-indigo-400 shrink-0" />
+                  <FileText size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} className="shrink-0" />
                   <span className="truncate">{cardNode.name}</span>
                 </div>
               ))
