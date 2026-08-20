@@ -1,11 +1,12 @@
-'use client';
-
 import { NodeData } from '../types/flashcard';
+import { StudyLogEntry } from '../types/stats';
 import { exportToWinUIJson, importFromWinUIJson, calculateJsonHash } from './winuiJsonConverter';
+import { idbGetStudyLogs, idbSaveStudyLogs } from './db';
 
-// Exact File Names matching WinUI 3 appsettings.json SyncOptions
+// Exact File Names matching WinUI 3 appsettings.json SyncOptions + stats sync
 export const LIBRARY_FILE_NAME = 'library.json';
 export const METADATA_FILE_NAME = 'sync.json';
+export const STATS_FILE_NAME = 'stats.json';
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 
 export const STORAGE_CLIENT_ID_KEY = 'flashcards_web_gdrive_client_id_v1';
@@ -331,6 +332,99 @@ async function uploadSingleFileToDrive(
 }
 
 /**
+ * Upload study logs to Google Drive appDataFolder (stats.json)
+ */
+export async function uploadStatsToDrive(
+  accessToken: string,
+  logs: StudyLogEntry[]
+): Promise<{ success: boolean; isAuthError?: boolean; error?: string }> {
+  try {
+    const jsonStr = JSON.stringify(logs, null, 2);
+    return await uploadSingleFileToDrive(accessToken, STATS_FILE_NAME, jsonStr);
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to upload stats' };
+  }
+}
+
+/**
+ * Download study logs from Google Drive appDataFolder (stats.json)
+ */
+export async function downloadStatsFromDrive(
+  accessToken: string
+): Promise<{ success: boolean; logs?: StudyLogEntry[]; isAuthError?: boolean; error?: string }> {
+  try {
+    const findRes = await findFileInAppDataFolder(accessToken, STATS_FILE_NAME);
+    if (!findRes.success) return findRes;
+    if (!findRes.file) return { success: true, logs: [] };
+
+    const downloadRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${findRes.file.id}?alt=media`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (downloadRes.status === 401) {
+      return { success: false, isAuthError: true, error: 'Authentication token expired' };
+    }
+
+    if (!downloadRes.ok) {
+      return { success: false, error: `Download stats failed: ${downloadRes.statusText}` };
+    }
+
+    const jsonText = await downloadRes.text();
+    let parsed: StudyLogEntry[] = [];
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      parsed = [];
+    }
+
+    return { success: true, logs: Array.isArray(parsed) ? parsed : [] };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to download stats' };
+  }
+}
+
+/**
+ * Two-way merge & sync study logs between local IndexedDB and remote Google Drive stats.json
+ */
+export async function syncStudyStats(accessToken: string): Promise<void> {
+  try {
+    const localLogs = await idbGetStudyLogs(1000);
+    const remoteRes = await downloadStatsFromDrive(accessToken);
+    if (!remoteRes.success) return;
+
+    const remoteLogs = remoteRes.logs || [];
+
+    // Union merge by unique log ID
+    const mergedMap = new Map<string, StudyLogEntry>();
+    for (const log of localLogs) {
+      if (log && log.id) mergedMap.set(log.id, log);
+    }
+    for (const log of remoteLogs) {
+      if (log && log.id) mergedMap.set(log.id, log);
+    }
+
+    const mergedList = Array.from(mergedMap.values()).sort(
+      (a, b) => new Date(b.reviewedAt).getTime() - new Date(a.reviewedAt).getTime()
+    );
+
+    // If new logs were found from remote, update local IndexedDB
+    if (mergedList.length > localLogs.length) {
+      await idbSaveStudyLogs(mergedList);
+    }
+
+    // If local had new logs that remote didn't have (or first upload), push to Google Drive
+    if (mergedList.length > remoteLogs.length || (!remoteRes.logs && mergedList.length > 0)) {
+      await uploadStatsToDrive(accessToken, mergedList);
+    }
+  } catch (err) {
+    console.error('Failed to sync study stats:', err);
+  }
+}
+
+/**
  * 1:1 Push to Google Drive (Atomic upload of library.json + sync.json metadata matching WinUI 3 PushInternalAsync)
  */
 export async function uploadToGoogleDrive(
@@ -353,6 +447,10 @@ export async function uploadToGoogleDrive(
     if (!metaUpload.success) return metaUpload;
 
     saveStoredLocalMetadata(metadata);
+
+    // Also sync study stats in background
+    syncStudyStats(accessToken);
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to upload to Google Drive' };
@@ -441,6 +539,9 @@ export async function downloadFromGoogleDrive(
       return { success: false, error: 'Failed to extract decks from downloaded library.json' };
     }
 
+    // Also sync study stats in background
+    syncStudyStats(accessToken);
+
     return {
       success: true,
       nodes: parsedNodes,
@@ -454,6 +555,7 @@ export async function downloadFromGoogleDrive(
  * 1:1 Port of WinUI 3 C# GoogleDriveSyncService.cs / LibraryCoordinator.cs SyncAsync algorithm:
  * Compares local vs remote sync.json metadata.
  * Only uploads when local is newer; downloads when remote is newer!
+ * Also performs background 2-way sync of stats.json (study history).
  */
 export async function performSmartSync(
   accessToken: string,
@@ -464,8 +566,12 @@ export async function performSmartSync(
   nodes?: NodeData[];
   isAuthError?: boolean;
   error?: string;
+  statsSynced?: boolean;
 }> {
   try {
+    // Also sync study stats in background alongside library sync
+    syncStudyStats(accessToken);
+
     const remoteMetaRes = await getRemoteMetadataFromDrive(accessToken);
     if (!remoteMetaRes.success) {
       if (remoteMetaRes.isAuthError) {

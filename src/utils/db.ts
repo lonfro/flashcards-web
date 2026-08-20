@@ -182,6 +182,23 @@ export async function idbGetStudyLogs(limit: number = 200): Promise<StudyLogEntr
 }
 
 /**
+ * Put multiple study log entries (batch upsert)
+ */
+export async function idbSaveStudyLogs(entries: StudyLogEntry[]): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const db = await getDB();
+    const tx = db.transaction('study_logs', 'readwrite');
+    for (const entry of entries) {
+      await tx.store.put(entry);
+    }
+    await tx.done;
+  } catch (error) {
+    console.error('Failed to save study logs to IndexedDB:', error);
+  }
+}
+
+/**
  * Clear all study log history
  */
 export async function idbClearStudyLogs(): Promise<void> {

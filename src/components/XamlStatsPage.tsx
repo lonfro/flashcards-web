@@ -17,6 +17,8 @@ import {
 import { NodeData } from '../types/flashcard';
 import { StudyLogEntry, DeckMasteryStat } from '../types/stats';
 import { idbGetStudyLogs, idbClearStudyLogs } from '../utils/db';
+import { syncStudyStats } from '../utils/googleDriveSync';
+import { useSync } from '../context';
 
 interface XamlStatsPageProps {
   nodes: NodeData[];
@@ -24,6 +26,7 @@ interface XamlStatsPageProps {
 }
 
 export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevision }) => {
+  const { accessToken } = useSync();
   const [logs, setLogs] = useState<StudyLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [timeRange, setTimeRange] = useState<'7d' | '14d' | '30d' | 'all'>('14d');
@@ -31,6 +34,9 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
   const loadLogs = async () => {
     setIsLoading(true);
     try {
+      if (accessToken) {
+        await syncStudyStats(accessToken);
+      }
       const data = await idbGetStudyLogs(500);
       setLogs(data);
     } catch (e) {
@@ -42,7 +48,7 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
 
   useEffect(() => {
     loadLogs();
-  }, []);
+  }, [accessToken]);
 
   const handleClearHistory = async () => {
     if (confirm('Are you sure you want to clear all revision and study history logs? (Card weights and decks will remain intact)')) {
