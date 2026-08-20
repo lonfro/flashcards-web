@@ -28,6 +28,7 @@ import {
   clearStoredToken,
   requestGoogleDriveToken,
   requestSilentGoogleDriveToken,
+  refreshAccessTokenViaServer,
   uploadToGoogleDrive,
   downloadFromGoogleDrive,
   getRemoteMetadataFromDrive,
@@ -125,11 +126,11 @@ export default function HomePage() {
       console.error(e);
     }
 
-    // Check Google Drive token for initial load smart sync (1:1 WinUI SyncService algorithm)
+    // Check Google Drive token for initial load - try persistent session first
     const token = getStoredAccessToken();
-    const savedClientId = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_CLIENT_ID_KEY) : null;
 
     if (token) {
+      // Valid localStorage access token - use it immediately
       setAccessToken(token);
       setSyncState('syncing');
 
@@ -143,38 +144,54 @@ export default function HomePage() {
           }
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
-          try {
-            localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-          } catch (e) {}
+          try { localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr); } catch (e) {}
           setSyncState('synced');
-        } else if (res.isAuthError && savedClientId) {
-          setSyncState('syncing');
-          requestSilentGoogleDriveToken(
-            savedClientId,
-            (newToken) => {
-              setAccessToken(newToken);
-              performSmartSync(newToken, data).then((sRes) => {
+        } else if (res.isAuthError) {
+          // Access token expired mid-session — try server refresh cookie
+          refreshAccessTokenViaServer().then((refreshRes) => {
+            if (refreshRes.success && refreshRes.accessToken) {
+              setAccessToken(refreshRes.accessToken);
+              performSmartSync(refreshRes.accessToken, data).then((sRes) => {
                 if (sRes.success && sRes.nodes) {
                   setNodes(sRes.nodes);
                   saveStoredNodes(sRes.nodes);
-                  const firstCard = sRes.nodes.find((n) => n.type === 'card');
-                  setSelectedNodeId(firstCard ? firstCard.id : (sRes.nodes[0]?.id || null));
                 }
-                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                setLastSyncTime(timeStr);
-                try {
-                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-                } catch (e) {}
                 setSyncState('synced');
               });
-            },
-            () => {
+            } else {
               clearStoredToken();
               setAccessToken(null);
               setSyncState('unauthenticated');
             }
-          );
+          });
         } else {
+          setSyncState('unauthenticated');
+        }
+      });
+    } else {
+      // No localStorage token — try server HttpOnly refresh_token cookie for persistent session
+      setSyncState('syncing');
+      refreshAccessTokenViaServer().then((refreshRes) => {
+        if (refreshRes.success && refreshRes.accessToken) {
+          setAccessToken(refreshRes.accessToken);
+          performSmartSync(refreshRes.accessToken, data).then((res) => {
+            if (res.success) {
+              if (res.nodes) {
+                setNodes(res.nodes);
+                saveStoredNodes(res.nodes);
+                const firstCard = res.nodes.find((n) => n.type === 'card');
+                setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
+              }
+              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              setLastSyncTime(timeStr);
+              try { localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr); } catch (e) {}
+              setSyncState('synced');
+            } else {
+              setSyncState('synced'); // token works, sync just had nothing to do
+            }
+          });
+        } else {
+          // No persistent session — user needs to sign in
           setSyncState('unauthenticated');
         }
       });
