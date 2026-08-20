@@ -424,6 +424,22 @@ export async function syncStudyStats(accessToken: string): Promise<void> {
   }
 }
 
+let statsUploadTimeout: NodeJS.Timeout | null = null;
+
+/**
+ * Triggers a debounced (1.5s) upload/merge of stats.json to Google Drive.
+ * Only called when study stats actually change (e.g. rating a card).
+ */
+export function triggerDebouncedStatsUpload(accessToken: string): void {
+  if (!accessToken) return;
+  if (statsUploadTimeout) {
+    clearTimeout(statsUploadTimeout);
+  }
+  statsUploadTimeout = setTimeout(() => {
+    syncStudyStats(accessToken);
+  }, 1500);
+}
+
 /**
  * 1:1 Push to Google Drive (Atomic upload of library.json + sync.json metadata matching WinUI 3 PushInternalAsync)
  */
@@ -447,10 +463,6 @@ export async function uploadToGoogleDrive(
     if (!metaUpload.success) return metaUpload;
 
     saveStoredLocalMetadata(metadata);
-
-    // Also sync study stats in background
-    syncStudyStats(accessToken);
-
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to upload to Google Drive' };
@@ -539,9 +551,6 @@ export async function downloadFromGoogleDrive(
       return { success: false, error: 'Failed to extract decks from downloaded library.json' };
     }
 
-    // Also sync study stats in background
-    syncStudyStats(accessToken);
-
     return {
       success: true,
       nodes: parsedNodes,
@@ -555,7 +564,6 @@ export async function downloadFromGoogleDrive(
  * 1:1 Port of WinUI 3 C# GoogleDriveSyncService.cs / LibraryCoordinator.cs SyncAsync algorithm:
  * Compares local vs remote sync.json metadata.
  * Only uploads when local is newer; downloads when remote is newer!
- * Also performs background 2-way sync of stats.json (study history).
  */
 export async function performSmartSync(
   accessToken: string,
@@ -566,12 +574,8 @@ export async function performSmartSync(
   nodes?: NodeData[];
   isAuthError?: boolean;
   error?: string;
-  statsSynced?: boolean;
 }> {
   try {
-    // Also sync study stats in background alongside library sync
-    syncStudyStats(accessToken);
-
     const remoteMetaRes = await getRemoteMetadataFromDrive(accessToken);
     if (!remoteMetaRes.success) {
       if (remoteMetaRes.isAuthError) {

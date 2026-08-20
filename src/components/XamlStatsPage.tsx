@@ -17,7 +17,7 @@ import {
 import { NodeData } from '../types/flashcard';
 import { StudyLogEntry, DeckMasteryStat } from '../types/stats';
 import { idbGetStudyLogs, idbClearStudyLogs } from '../utils/db';
-import { syncStudyStats } from '../utils/googleDriveSync';
+import { syncStudyStats, uploadStatsToDrive } from '../utils/googleDriveSync';
 import { useSync } from '../context';
 
 interface XamlStatsPageProps {
@@ -53,6 +53,9 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
   const handleClearHistory = async () => {
     if (confirm('Are you sure you want to clear all revision and study history logs? (Card weights and decks will remain intact)')) {
       await idbClearStudyLogs();
+      if (accessToken) {
+        await uploadStatsToDrive(accessToken, []);
+      }
       setLogs([]);
     }
   };

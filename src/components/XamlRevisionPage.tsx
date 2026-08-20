@@ -5,6 +5,8 @@ import { NodeData, Difficulty } from '../types/flashcard';
 import { CardSettingsData, DifficultySettingsData } from '../types/cardSettings';
 import { calculateNextReview } from '../utils/spacedRepetition';
 import { idbLogReview } from '../utils/db';
+import { triggerDebouncedStatsUpload } from '../utils/googleDriveSync';
+import { useSync } from '../context';
 import { XamlCardControl } from './XamlCardControl';
 
 interface XamlRevisionPageProps {
@@ -36,6 +38,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   onUpdateCard,
   onGoToFlashcardsPage,
 }) => {
+  const { accessToken } = useSync();
   const [queue, setQueue] = useState<NodeData[]>(() => shuffleCards(cardsToRevise));
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
@@ -107,6 +110,11 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
         weight: updates.weight ?? current.card.weight,
       });
 
+      // Trigger debounced cloud stats sync only on difficulty rating change
+      if (accessToken) {
+        triggerDebouncedStatsUpload(accessToken);
+      }
+
       // Update in local queue
       setQueue((prev) => {
         const next = [...prev];
@@ -126,7 +134,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
         setIsFinished(true);
       }
     },
-    [queue, currentIndex, cardSettings, difficultySettings, onUpdateCard, selectedDividerNode]
+    [queue, currentIndex, cardSettings, difficultySettings, onUpdateCard, selectedDividerNode, accessToken]
   );
 
   // Keyboard accelerators matching WinUI XAML
