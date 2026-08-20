@@ -609,8 +609,6 @@ export default function HomePage() {
   };
 
   const handleDeleteNode = (nodeId: string) => {
-    if (!confirm('Delete this item?')) return;
-
     const idsToDelete = new Set<string>();
     const collectToDelete = (id: string) => {
       idsToDelete.add(id);
