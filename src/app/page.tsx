@@ -1,15 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { NodeData } from '../types/flashcard';
-import {
-  getStoredNodes,
-  saveStoredNodes,
-  resetToSampleNodes,
-  getAllCardsInDeck,
-} from '../utils/storage';
-import { WinUITitleBar, ActivePage } from '../components/WinUITitleBar';
+import { useLibrary, useSync, useNavigation, useSettings } from '../context';
+import { WinUITitleBar } from '../components/WinUITitleBar';
 import { XamlTreeView } from '../components/XamlTreeView';
 import { XamlCardControl } from '../components/XamlCardControl';
 import { XamlCardEditControl } from '../components/XamlCardEditControl';
@@ -18,746 +12,85 @@ import { XamlRevisionPage } from '../components/XamlRevisionPage';
 import { XamlSettingsPage } from '../components/XamlSettingsPage';
 import { XamlGridSplitter } from '../components/XamlGridSplitter';
 
-import { getStoredTheme, applyTheme } from '../utils/themePresets';
-import { exportToWinUIJson, importFromWinUIJson, calculateJsonHash } from '../utils/winuiJsonConverter';
-import {
-  SyncState,
-  STORAGE_LAST_SYNC_KEY,
-  STORAGE_CLIENT_ID_KEY,
-  getStoredAccessToken,
-  clearStoredToken,
-  requestGoogleDriveToken,
-  requestSilentGoogleDriveToken,
-  refreshAccessTokenViaServer,
-  uploadToGoogleDrive,
-  downloadFromGoogleDrive,
-  getRemoteMetadataFromDrive,
-  performSmartSync,
-  saveStoredLocalMetadata,
-} from '../utils/googleDriveSync';
-
-import {
-  CardSettingsData,
-  DifficultySettingsData,
-  DEFAULT_CARD_SETTINGS,
-  DEFAULT_DIFFICULTY_SETTINGS,
-} from '../types/cardSettings';
-import { applyWeightDecay } from '../utils/spacedRepetition';
-
-const SIDEBAR_WIDTH_KEY = 'flashcards_web_sidebar_width_v1';
-const AUTO_REFRESH_ENABLED_KEY = 'flashcards_web_auto_refresh_enabled_v1';
-const AUTO_REFRESH_INTERVAL_KEY = 'flashcards_web_auto_refresh_interval_v1';
-const CARD_SETTINGS_KEY = 'flashcards_web_card_settings_v1';
-const DIFFICULTY_SETTINGS_KEY = 'flashcards_web_difficulty_settings_v1';
-
 export default function HomePage() {
-  const [nodes, setNodes] = useState<NodeData[]>([]);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(250);
-  const [activePage, setActivePage] = useState<ActivePage>('FlashcardsPage');
-  const [historyStack, setHistoryStack] = useState<ActivePage[]>([]);
+  const {
+    nodes,
+    isLoading,
+    selectedNodeId,
+    selectedNode,
+    selectedCardNode,
+    revisionDividerNode,
+    cardsToRevise,
+    setSelectedNodeId,
+    setRevisionDividerId,
+    handleSelectNode,
+    handleTriggerAddCard,
+    handleSaveNewCard,
+    handleAddDivider,
+    handleStartEditCard,
+    handleSaveCardEdit,
+    handleRenameNode,
+    handleDeleteNode,
+    handleResetWeights,
+    handleExportAll,
+    handleImportAll,
+    handleResetAll,
+    handleMoveNode,
+    handleSortNodes,
+    handleUpdateNodes,
+  } = useLibrary();
 
-  // Mobile View Switcher: 'tree' (decks tree view) | 'card' (single card view)
-  const [mobileView, setMobileView] = useState<'tree' | 'card'>('tree');
+  const {
+    accessToken,
+    syncState,
+    lastSyncTime,
+    handleConnectDrive,
+    handleDisconnectDrive,
+    handleManualUpload,
+    handleManualDownload,
+    handleFullManualSync,
+  } = useSync();
 
-  // Selected Node (Divider or Card)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [addCardParentId, setAddCardParentId] = useState<string | null>(null);
+  const {
+    activePage,
+    canGoBack,
+    mobileView,
+    rightViewMode,
+    editingCardNode,
+    isCardFlipped,
+    setMobileView,
+    toggleMobileView,
+    setRightViewMode,
+    setIsCardFlipped,
+    handleNavigate,
+    handleGoBack,
+  } = useNavigation();
 
-  // Active Right View mode: 'CardView' | 'CardEditView' | 'CardAddView'
-  const [rightViewMode, setRightViewMode] = useState<'CardView' | 'CardEditView' | 'CardAddView'>(
-    'CardView'
-  );
-  const [editingCardNode, setEditingCardNode] = useState<NodeData | null>(null);
-  const [isCardFlipped, setIsCardFlipped] = useState<boolean>(false);
+  const {
+    sidebarWidth,
+    autoRefreshEnabled,
+    autoRefreshInterval,
+    cardSettings,
+    difficultySettings,
+    handleSidebarWidthChange,
+    handleToggleAutoRefresh,
+    handleChangeRefreshInterval,
+    handleUpdateCardSettings,
+    handleUpdateDifficultySettings,
+    handleResetCardSettings,
+    handleResetDifficultySettings,
+  } = useSettings();
 
-  // Revision state
-  const [revisionDividerId, setRevisionDividerId] = useState<string | null>(null);
-
-  // Google Drive Cloud Auto-Sync & Polling State
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [syncState, setSyncState] = useState<SyncState>('unauthenticated');
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-
-  // Auto-Refresh (Polling) Settings
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(30); // Default 30 seconds
-
-  // Card Settings & Difficulty Settings (1:1 WinUI CardSettings.cs & DifficultySettings.cs)
-  const [cardSettings, setCardSettings] = useState<CardSettingsData>(DEFAULT_CARD_SETTINGS);
-  const [difficultySettings, setDifficultySettings] = useState<DifficultySettingsData>(DEFAULT_DIFFICULTY_SETTINGS);
-
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Load initial nodes, theme, sidebar width, settings, and auto-sync on startup
-  useEffect(() => {
-    const data = getStoredNodes();
-    setNodes(data);
-    const theme = getStoredTheme();
-    applyTheme(theme);
-
-    try {
-      const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-      if (savedWidth) {
-        setSidebarWidth(parseInt(savedWidth, 10));
-      }
-      const savedSync = localStorage.getItem(STORAGE_LAST_SYNC_KEY);
-      if (savedSync) setLastSyncTime(savedSync);
-
-      const savedRefreshEnabled = localStorage.getItem(AUTO_REFRESH_ENABLED_KEY);
-      if (savedRefreshEnabled !== null) {
-        setAutoRefreshEnabled(savedRefreshEnabled === 'true');
-      }
-
-      const savedRefreshInterval = localStorage.getItem(AUTO_REFRESH_INTERVAL_KEY);
-      if (savedRefreshInterval) {
-        setAutoRefreshInterval(parseInt(savedRefreshInterval, 10));
-      }
-
-      const savedCardSettings = localStorage.getItem(CARD_SETTINGS_KEY);
-      if (savedCardSettings) {
-        setCardSettings(JSON.parse(savedCardSettings));
-      }
-
-      const savedDiffSettings = localStorage.getItem(DIFFICULTY_SETTINGS_KEY);
-      if (savedDiffSettings) {
-        setDifficultySettings(JSON.parse(savedDiffSettings));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-
-    // Check Google Drive token for initial load - try persistent session first
-    const token = getStoredAccessToken();
-
-    if (token) {
-      // Valid localStorage access token - use it immediately
-      setAccessToken(token);
-      setSyncState('syncing');
-
-      performSmartSync(token, data).then((res) => {
-        if (res.success) {
-          if (res.nodes) {
-            setNodes(res.nodes);
-            saveStoredNodes(res.nodes);
-            const firstCard = res.nodes.find((n) => n.type === 'card');
-            setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
-          }
-          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setLastSyncTime(timeStr);
-          try { localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr); } catch (e) {}
-          setSyncState('synced');
-        } else if (res.isAuthError) {
-          // Access token expired mid-session — try server refresh cookie
-          refreshAccessTokenViaServer().then((refreshRes) => {
-            if (refreshRes.success && refreshRes.accessToken) {
-              setAccessToken(refreshRes.accessToken);
-              performSmartSync(refreshRes.accessToken, data).then((sRes) => {
-                if (sRes.success && sRes.nodes) {
-                  setNodes(sRes.nodes);
-                  saveStoredNodes(sRes.nodes);
-                }
-                setSyncState('synced');
-              });
-            } else {
-              clearStoredToken();
-              setAccessToken(null);
-              setSyncState('unauthenticated');
-            }
-          });
-        } else {
-          setSyncState('unauthenticated');
-        }
-      });
-    } else {
-      // No localStorage token — try server HttpOnly refresh_token cookie for persistent session
-      setSyncState('syncing');
-      refreshAccessTokenViaServer().then((refreshRes) => {
-        if (refreshRes.success && refreshRes.accessToken) {
-          setAccessToken(refreshRes.accessToken);
-          performSmartSync(refreshRes.accessToken, data).then((res) => {
-            if (res.success) {
-              if (res.nodes) {
-                setNodes(res.nodes);
-                saveStoredNodes(res.nodes);
-                const firstCard = res.nodes.find((n) => n.type === 'card');
-                setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
-              }
-              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              setLastSyncTime(timeStr);
-              try { localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr); } catch (e) {}
-              setSyncState('synced');
-            } else {
-              setSyncState('synced'); // token works, sync just had nothing to do
-            }
-          });
-        } else {
-          // No persistent session — user needs to sign in
-          setSyncState('unauthenticated');
-        }
-      });
-    }
-  }, []);
-
-  // Card Weight Decay Background Engine
-  useEffect(() => {
-    if (!cardSettings.decayDurationHours || cardSettings.decayWeight <= 0) return;
-
-    const decayResult = applyWeightDecay(nodes, cardSettings);
-    if (decayResult) {
-      setNodes(decayResult.updatedNodes);
-      saveStoredNodes(decayResult.updatedNodes);
-      const updatedSettings = { ...cardSettings, lastDecayTime: decayResult.newLastDecayTime };
-      setCardSettings(updatedSettings);
-      try {
-        localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(updatedSettings));
-      } catch (e) {}
-    }
-  }, [nodes, cardSettings]);
-
-  // Background Auto-Refresh
-  useEffect(() => {
-    if (!autoRefreshEnabled || !accessToken) return;
-
-    const intervalMs = autoRefreshInterval * 1000;
-    const intervalId = setInterval(() => {
-      performSmartSync(accessToken, nodes).then((res) => {
-        if (res.success) {
-          if (res.nodes) {
-            setNodes(res.nodes);
-            saveStoredNodes(res.nodes);
-          }
-          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setLastSyncTime(timeStr);
-          try {
-            localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-          } catch (e) {}
-          setSyncState('synced');
-        } else if (res.isAuthError) {
-          setAccessToken(null);
-          setSyncState('unauthenticated');
-        }
-      });
-    }, intervalMs);
-
-    return () => clearInterval(intervalId);
-  }, [autoRefreshEnabled, autoRefreshInterval, accessToken, nodes]);
-
-  const handleSidebarWidthChange = (newWidth: number) => {
-    setSidebarWidth(newWidth);
-    try {
-      localStorage.setItem(SIDEBAR_WIDTH_KEY, newWidth.toString());
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleToggleAutoRefresh = (enabled: boolean) => {
-    setAutoRefreshEnabled(enabled);
-    try {
-      localStorage.setItem(AUTO_REFRESH_ENABLED_KEY, enabled.toString());
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleChangeRefreshInterval = (seconds: number) => {
-    setAutoRefreshInterval(seconds);
-    try {
-      localStorage.setItem(AUTO_REFRESH_INTERVAL_KEY, seconds.toString());
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleUpdateCardSettings = (newSettings: CardSettingsData) => {
-    setCardSettings(newSettings);
-    try {
-      localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(newSettings));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleUpdateDifficultySettings = (newSettings: DifficultySettingsData) => {
-    setDifficultySettings(newSettings);
-    try {
-      localStorage.setItem(DIFFICULTY_SETTINGS_KEY, JSON.stringify(newSettings));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleResetCardSettings = () => {
-    setCardSettings(DEFAULT_CARD_SETTINGS);
-    try {
-      localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(DEFAULT_CARD_SETTINGS));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleResetDifficultySettings = () => {
-    setDifficultySettings(DEFAULT_DIFFICULTY_SETTINGS);
-    try {
-      localStorage.setItem(DIFFICULTY_SETTINGS_KEY, JSON.stringify(DEFAULT_DIFFICULTY_SETTINGS));
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Central Node Mutation Handler with 1:1 WinUI performSmartSync
-  const handleUpdateNodes = (newNodes: NodeData[]) => {
-    setNodes(newNodes);
-    saveStoredNodes(newNodes);
-
-    // Save updated local SyncMetadata with current timestamp for smart sync comparison
-    const jsonStr = exportToWinUIJson(newNodes, null, true);
-    calculateJsonHash(jsonStr).then((hash) => {
-      saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
-    });
-
-    if (accessToken) {
-      setSyncState('syncing');
-
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-
-      syncTimeoutRef.current = setTimeout(() => {
-        performSmartSync(accessToken, newNodes).then((res) => {
-          if (res.success) {
-            if (res.nodes) {
-              setNodes(res.nodes);
-              saveStoredNodes(res.nodes);
-            }
-            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            setLastSyncTime(timeStr);
-            try {
-              localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-            } catch (e) {}
-            setSyncState('synced');
-          } else if (res.isAuthError) {
-            setAccessToken(null);
-            setSyncState('unauthenticated');
-          } else {
-            setSyncState('error');
-          }
-        });
-      }, 1200);
-    }
-  };
-
-  // Google Drive Authentication Handlers
-  const handleConnectDrive = (clientId: string) => {
-    setSyncState('syncing');
-    requestGoogleDriveToken(
-      clientId,
-      (token) => {
-        setAccessToken(token);
-        setSyncState('syncing');
-
-        // On first sign-in / connect: automatically restore decks from Google Drive
-        downloadFromGoogleDrive(token, nodes, true).then((dlRes) => {
-          if (dlRes.success && dlRes.nodes && dlRes.nodes.length > 0) {
-            setNodes(dlRes.nodes);
-            saveStoredNodes(dlRes.nodes);
-            const firstCard = dlRes.nodes.find((n) => n.type === 'card');
-            setSelectedNodeId(firstCard ? firstCard.id : (dlRes.nodes[0]?.id || null));
-
-            getRemoteMetadataFromDrive(token).then((metaRes) => {
-              if (metaRes.metadata) {
-                saveStoredLocalMetadata(metaRes.metadata);
-              }
-            });
-
-            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            setLastSyncTime(timeStr);
-            try {
-              localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-            } catch (e) {}
-            setSyncState('synced');
-          } else {
-            // No existing library on Google Drive yet: upload current initial library
-            uploadToGoogleDrive(token, nodes).then((upRes) => {
-              if (upRes.success) {
-                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                setLastSyncTime(timeStr);
-                try {
-                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-                } catch (e) {}
-                setSyncState('synced');
-              } else if (upRes.isAuthError) {
-                setAccessToken(null);
-                setSyncState('unauthenticated');
-              } else {
-                setSyncState('error');
-              }
-            });
-          }
-        });
-      },
-      () => {
-        setSyncState('error');
-      }
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-dvh w-screen max-w-full bg-slate-950 text-slate-100 items-center justify-center select-none fixed inset-0">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-400 font-medium">Loading library from IndexedDB...</p>
+        </div>
+      </div>
     );
-  };
-
-  const handleDisconnectDrive = () => {
-    clearStoredToken();
-    setAccessToken(null);
-    setSyncState('unauthenticated');
-  };
-
-  const handleManualUpload = () => {
-    if (!accessToken) return;
-    setSyncState('syncing');
-    uploadToGoogleDrive(accessToken, nodes).then((res) => {
-      if (res.success) {
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLastSyncTime(timeStr);
-        try {
-          localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-        } catch (e) {}
-        setSyncState('synced');
-      } else if (res.isAuthError) {
-        setAccessToken(null);
-        setSyncState('unauthenticated');
-      } else {
-        setSyncState('error');
-      }
-    });
-  };
-
-  const handleManualDownload = () => {
-    if (!accessToken) return;
-    setSyncState('syncing');
-    downloadFromGoogleDrive(accessToken, nodes, true).then((res) => {
-      if (res.success && res.nodes) {
-        setNodes(res.nodes);
-        saveStoredNodes(res.nodes);
-        if (!selectedNodeId || !res.nodes.some((n) => n.id === selectedNodeId)) {
-          const firstCard = res.nodes.find((n) => n.type === 'card');
-          setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
-        }
-        const jsonStr = exportToWinUIJson(res.nodes, null, true);
-        calculateJsonHash(jsonStr).then((hash) => {
-          saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
-        });
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLastSyncTime(timeStr);
-        try {
-          localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-        } catch (e) {}
-        setSyncState('synced');
-      } else if (res.isAuthError) {
-        setAccessToken(null);
-        setSyncState('unauthenticated');
-      } else {
-        setSyncState('error');
-      }
-    });
-  };
-
-  // Full Manual Sync Trigger on TitleBar Sync Badge Click
-  const handleFullManualSync = () => {
-    if (!accessToken) return;
-    setSyncState('syncing');
-
-    performSmartSync(accessToken, nodes).then((res) => {
-      if (res.success) {
-        if (res.nodes) {
-          setNodes(res.nodes);
-          saveStoredNodes(res.nodes);
-          if (!selectedNodeId || !res.nodes.some((n) => n.id === selectedNodeId)) {
-            const firstCard = res.nodes.find((n) => n.type === 'card');
-            setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
-          }
-        }
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLastSyncTime(timeStr);
-        try {
-          localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-        } catch (e) {}
-        setSyncState('synced');
-      } else if (res.isAuthError) {
-        setAccessToken(null);
-        setSyncState('unauthenticated');
-      } else {
-        setSyncState('error');
-      }
-    });
-  };
-
-  // Selected node object
-  const selectedNode = useMemo(() => {
-    if (!selectedNodeId) return null;
-    return nodes.find((n) => n.id === selectedNodeId) || null;
-  }, [nodes, selectedNodeId]);
-
-  // Selected card object
-  const selectedCardNode = useMemo(() => {
-    if (!selectedNode) return null;
-    if (selectedNode.type === 'card' && selectedNode.card) return selectedNode;
-    return null;
-  }, [selectedNode]);
-
-  // Revision Cards selection
-  const revisionDividerNode = useMemo(() => {
-    if (!revisionDividerId) return null;
-    return nodes.find((n) => n.id === revisionDividerId) || null;
-  }, [nodes, revisionDividerId]);
-
-  const cardsToRevise = useMemo(() => {
-    return getAllCardsInDeck(nodes, revisionDividerId);
-  }, [nodes, revisionDividerId]);
-
-  // Navigation handlers
-  const handleNavigate = (page: ActivePage) => {
-    if (page === activePage) return;
-    setHistoryStack((prev) => [...prev, activePage]);
-    setActivePage(page);
-    setIsCardFlipped(false);
-  };
-
-  const handleGoBack = () => {
-    if (historyStack.length === 0) return;
-    const prevPage = historyStack[historyStack.length - 1];
-    setHistoryStack((prev) => prev.slice(0, prev.length - 1));
-    setActivePage(prevPage);
-    setIsCardFlipped(false);
-  };
-
-  // TreeView Item Selection
-  const handleSelectNode = (node: NodeData) => {
-    setSelectedNodeId(node.id);
-    setIsCardFlipped(false);
-    setRightViewMode('CardView');
-    if (node.type === 'card') {
-      setMobileView('card');
-    }
-  };
-
-  // Trigger Add Card mode
-  const handleTriggerAddCard = (parentId: string | null) => {
-    setAddCardParentId(parentId);
-    if (parentId) setSelectedNodeId(parentId);
-    setRightViewMode('CardAddView');
-    setMobileView('card');
-  };
-
-  // Save new card
-  const handleSaveNewCard = (front: string, back: string) => {
-    const newId = `node-card-${Date.now()}`;
-    const targetParent = addCardParentId !== undefined ? addCardParentId : (selectedNode?.type === 'divider' ? selectedNode.id : null);
-    
-    const newCardNode: NodeData = {
-      id: newId,
-      name: front.slice(0, 35).replace(/[#*`]/g, '') || 'New Flashcard',
-      type: 'card',
-      parentId: targetParent,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      card: {
-        id: `card-${Date.now()}`,
-        nodeId: newId,
-        front,
-        back,
-        weight: cardSettings.defaultWeight,
-        easeFactor: 2.5,
-        interval: 1,
-        reviewCount: 0,
-      },
-    };
-    handleUpdateNodes([...nodes, newCardNode]);
-    setSelectedNodeId(newId);
-    setRightViewMode('CardView');
-    setMobileView('card');
-  };
-
-  const handleAddDivider = (parentId: string | null) => {
-    const newId = `node-deck-${Date.now()}`;
-    const targetParent = parentId !== undefined ? parentId : (selectedNode?.type === 'divider' ? selectedNode.id : null);
-
-    const newDividerNode: NodeData = {
-      id: newId,
-      name: 'New Divider',
-      type: 'divider',
-      parentId: targetParent,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      divider: {
-        id: `div-${Date.now()}`,
-        nodeId: newId,
-        description: '',
-      },
-    };
-    handleUpdateNodes([...nodes, newDividerNode]);
-    setSelectedNodeId(newId);
-  };
-
-  const handleStartEditCard = (cardNode: NodeData) => {
-    setEditingCardNode(cardNode);
-    setRightViewMode('CardEditView');
-    setMobileView('card');
-  };
-
-  const handleSaveCardEdit = (front: string, back: string) => {
-    if (!editingCardNode) return;
-
-    const updated = nodes.map((n) =>
-      n.id === editingCardNode.id
-        ? {
-            ...n,
-            name: front.slice(0, 35).replace(/[#*`]/g, '') || n.name,
-            updatedAt: new Date().toISOString(),
-            card: n.card ? { ...n.card, front, back } : undefined,
-          }
-        : n
-    );
-
-    handleUpdateNodes(updated);
-    setRightViewMode('CardView');
-    setIsCardFlipped(false);
-  };
-
-  const handleRenameNode = (node: NodeData, newName: string) => {
-    const updated = nodes.map((n) => (n.id === node.id ? { ...n, name: newName } : n));
-    handleUpdateNodes(updated);
-  };
-
-  const handleDeleteNode = (nodeId: string) => {
-    const idsToDelete = new Set<string>();
-    const collectToDelete = (id: string) => {
-      idsToDelete.add(id);
-      nodes.filter((n) => n.parentId === id).forEach((child) => collectToDelete(child.id));
-    };
-    collectToDelete(nodeId);
-
-    const filtered = nodes.filter((n) => !idsToDelete.has(n.id));
-    handleUpdateNodes(filtered);
-    if (selectedNodeId && idsToDelete.has(selectedNodeId)) {
-      setSelectedNodeId(null);
-      setMobileView('tree');
-    }
-  };
-
-  const handleResetWeights = (nodeId: string, recursive: boolean = true) => {
-    const idsToReset = new Set<string>();
-    const targetNode = nodes.find((n) => n.id === nodeId);
-    if (!targetNode) return;
-
-    if (targetNode.type === 'card') {
-      idsToReset.add(nodeId);
-    } else if (targetNode.type === 'divider') {
-      const collect = (id: string) => {
-        nodes.filter((n) => n.parentId === id).forEach((c) => {
-          if (c.type === 'card') idsToReset.add(c.id);
-          else if (c.type === 'divider' && recursive) collect(c.id);
-        });
-      };
-      collect(nodeId);
-    }
-
-    const updated = nodes.map((n) => {
-      if (idsToReset.has(n.id) && n.card) {
-        return {
-          ...n,
-          card: { ...n.card, weight: cardSettings.defaultWeight },
-        };
-      }
-      return n;
-    });
-    handleUpdateNodes(updated);
-  };
-
-  // Export / Import
-  const handleExportAll = (dividerId?: string) => {
-    const jsonStr = exportToWinUIJson(nodes, typeof dividerId === 'string' ? dividerId : null);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `flashcards_export_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportAll = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    targetParentId: string | null = null
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const imported = JSON.parse(evt.target?.result as string);
-        const updated = importFromWinUIJson(imported, nodes, targetParentId);
-        handleUpdateNodes(updated);
-        alert('WinUI flashcards imported successfully!');
-      } catch (err) {
-        alert('Failed to parse WinUI JSON file.');
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleResetAll = () => {
-    if (confirm('Reset to factory sample flashcards?')) {
-      const sample = resetToSampleNodes();
-      handleUpdateNodes(sample);
-      setSelectedNodeId(null);
-      setMobileView('tree');
-    }
-  };
-
-  const handleMoveNode = (draggedNodeId: string, targetParentId: string | null) => {
-    if (draggedNodeId === targetParentId) return;
-
-    const isDescendant = (id: string, ancestorId: string): boolean => {
-      const current = nodes.find((n) => n.id === id);
-      if (!current || !current.parentId) return false;
-      if (current.parentId === ancestorId) return true;
-      return isDescendant(current.parentId, ancestorId);
-    };
-
-    if (targetParentId && isDescendant(targetParentId, draggedNodeId)) return;
-
-    const updated = nodes.map((n) =>
-      n.id === draggedNodeId ? { ...n, parentId: targetParentId, updatedAt: new Date().toISOString() } : n
-    );
-
-    handleUpdateNodes(updated);
-  };
-
-  const handleSortNodes = (recursive: boolean) => {
-    const sortLevel = (list: NodeData[], parentId: string | null): NodeData[] => {
-      const children = list.filter((n) => n.parentId === parentId);
-      const others = list.filter((n) => n.parentId !== parentId);
-
-      children.sort((a, b) => {
-        if (a.type !== b.type) {
-          return a.type === 'divider' ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
-      });
-
-      let nextList = [...others, ...children];
-
-      if (recursive) {
-        children.forEach((c) => {
-          if (c.type === 'divider') {
-            nextList = sortLevel(nextList, c.id);
-          }
-        });
-      }
-
-      return nextList;
-    };
-
-    const sorted = sortLevel(nodes, null);
-    handleUpdateNodes(sorted);
-  };
+  }
 
   return (
     <div className="flex flex-col h-dvh w-screen max-w-full bg-slate-950 text-slate-100 overflow-hidden font-sans select-none fixed inset-0">
@@ -765,13 +98,13 @@ export default function HomePage() {
       <WinUITitleBar
         activePage={activePage}
         onNavigate={handleNavigate}
-        canGoBack={historyStack.length > 0}
+        canGoBack={canGoBack}
         onGoBack={handleGoBack}
         syncState={syncState}
         lastSyncTime={lastSyncTime}
         onManualSync={handleFullManualSync}
         mobileView={mobileView}
-        onToggleMobileView={() => setMobileView((prev) => (prev === 'tree' ? 'card' : 'tree'))}
+        onToggleMobileView={toggleMobileView}
       />
 
       {/* Main Content Pages */}
@@ -854,7 +187,7 @@ export default function HomePage() {
                 <XamlCardControl
                   cardNode={selectedCardNode}
                   isFlipped={isCardFlipped}
-                  onFlip={() => setIsCardFlipped(!isCardFlipped)}
+                  onFlip={() => setIsCardFlipped((prev) => !prev)}
                   onStartEditing={() => {
                     if (selectedCardNode) handleStartEditCard(selectedCardNode);
                   }}

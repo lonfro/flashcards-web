@@ -145,34 +145,11 @@ export const INITIAL_SAMPLE_NODES: NodeData[] = [
   },
 ];
 
-export function getStoredNodes(): NodeData[] {
-  if (typeof window === 'undefined') return INITIAL_SAMPLE_NODES;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_NODES));
-      return INITIAL_SAMPLE_NODES;
-    }
-    return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to parse stored nodes:', e);
-    return INITIAL_SAMPLE_NODES;
-  }
-}
+export { idbGetNodes as getStoredNodes, idbSaveNodes as saveStoredNodes } from './db';
 
-export function saveStoredNodes(nodes: NodeData[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes));
-  } catch (e) {
-    console.error('Failed to save nodes to localStorage:', e);
-  }
-}
-
-export function resetToSampleNodes(): NodeData[] {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_NODES));
-  }
+export async function resetToSampleNodes(): Promise<NodeData[]> {
+  const { idbSaveNodes } = await import('./db');
+  await idbSaveNodes(INITIAL_SAMPLE_NODES);
   return INITIAL_SAMPLE_NODES;
 }
 

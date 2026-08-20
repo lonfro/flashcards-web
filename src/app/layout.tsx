@@ -43,6 +43,8 @@ export const viewport: Viewport = {
   themeColor: "#020617",
 };
 
+import { AppProviders } from "../context";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
@@ -77,7 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-full flex flex-col overflow-hidden select-none bg-slate-950 text-slate-100">
-        {children}
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
