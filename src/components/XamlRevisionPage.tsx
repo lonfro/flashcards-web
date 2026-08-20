@@ -1,8 +1,6 @@
-'use client';
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { RefreshCw, Trophy, RotateCcw, ArrowRight } from 'lucide-react';
+import { RefreshCw, Trophy, RotateCcw, ArrowRight, Shuffle } from 'lucide-react';
 import { NodeData, Difficulty } from '../types/flashcard';
 import { CardSettingsData, DifficultySettingsData } from '../types/cardSettings';
 import { calculateNextReview } from '../utils/spacedRepetition';
@@ -17,6 +15,18 @@ interface XamlRevisionPageProps {
   onGoToFlashcardsPage: () => void;
 }
 
+/**
+ * Fisher-Yates shuffle algorithm to randomize revision queue order (matching WinUI 3 random deal)
+ */
+function shuffleCards(cards: NodeData[]): NodeData[] {
+  const array = [...cards];
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
 export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   selectedDividerNode,
   cardsToRevise,
@@ -25,7 +35,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   onUpdateCard,
   onGoToFlashcardsPage,
 }) => {
-  const [queue, setQueue] = useState<NodeData[]>(cardsToRevise);
+  const [queue, setQueue] = useState<NodeData[]>(() => shuffleCards(cardsToRevise));
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [isFinished, setIsFinished] = useState<boolean>(false);
@@ -34,10 +44,10 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   const lastDividerKeyRef = useRef<string>(dividerKey);
 
   useEffect(() => {
-    // Only reset queue when switching to a different deck/divider or on initial load
+    // Only reset & shuffle queue when switching to a different deck/divider or on initial load
     if (lastDividerKeyRef.current !== dividerKey || queue.length === 0) {
       lastDividerKeyRef.current = dividerKey;
-      setQueue(cardsToRevise);
+      setQueue(shuffleCards(cardsToRevise));
       setCurrentIndex(0);
       setIsFlipped(false);
       setIsFinished(false);
@@ -151,7 +161,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
           <div className="flex items-center justify-center space-x-3 pt-2">
             <button
               onClick={() => {
-                setQueue(cardsToRevise);
+                setQueue(shuffleCards(cardsToRevise));
                 setCurrentIndex(0);
                 setIsFlipped(false);
                 setIsFinished(false);
@@ -159,7 +169,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg border border-slate-700 inline-flex items-center space-x-2 touch-manipulation"
             >
               <RotateCcw size={14} />
-              <span>Revise Again</span>
+              <span>Revise Again (Reshuffle)</span>
             </button>
             <button
               onClick={onGoToFlashcardsPage}
@@ -184,7 +194,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
 
   return (
     <div className="flex-1 h-full flex flex-col justify-between items-center relative overflow-hidden select-none p-3 sm:p-6">
-      {/* Dynamic Header: Deck Badge (Left) + Learning Progress (Dead-Center) + Card Counter (Right) */}
+      {/* Dynamic Header: Deck Badge (Left) + Learning Progress (Dead-Center) + Card Counter & Shuffle (Right) */}
       <div className="w-full flex items-center justify-between z-10 px-2 shrink-0 relative min-h-[36px]">
         {/* Left: Deck Badge */}
         <div className="px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-md backdrop-blur-md text-xs font-medium text-slate-300 flex items-center space-x-1.5 max-w-[130px] sm:max-w-[220px] truncate z-10">
@@ -209,10 +219,23 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
           </div>
         </div>
 
-        {/* Right: Counter Badge */}
-        <span className="text-[11px] sm:text-xs font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800 shrink-0 z-10">
-          {currentIndex + 1} / {queue.length}
-        </span>
+        {/* Right: Shuffle & Counter Badge */}
+        <div className="flex items-center space-x-1.5 shrink-0 z-10">
+          <button
+            onClick={() => {
+              setQueue(shuffleCards(cardsToRevise));
+              setCurrentIndex(0);
+              setIsFlipped(false);
+            }}
+            className="p-1.5 rounded-md bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 transition-colors flex items-center justify-center touch-manipulation"
+            title="Reshuffle cards in deck"
+          >
+            <Shuffle size={13} />
+          </button>
+          <span className="text-[11px] sm:text-xs font-mono text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
+            {currentIndex + 1} / {queue.length}
+          </span>
+        </div>
       </div>
 
       {/* Center Card Viewport (min-h-0 prevents card from overflowing and pushing buttons offscreen) */}
