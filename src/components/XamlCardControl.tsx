@@ -149,7 +149,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
       <div className="w-full my-auto perspective-1000 flex flex-col items-center justify-center px-1 sm:px-4 py-2">
         <motion.div
           onClick={onFlip}
-          className="w-full max-w-[550px] min-h-[230px] sm:min-h-[325px] cursor-pointer rounded-xl bg-slate-900 border border-slate-800 shadow-2xl relative flex flex-col justify-center items-center p-4 sm:p-8 backdrop-blur-xl overflow-hidden origin-center"
+          className="w-full max-w-[550px] min-h-[240px] sm:min-h-[325px] aspect-[550/325] cursor-pointer rounded-xl bg-slate-900 border border-slate-800 shadow-2xl relative flex flex-col justify-center items-center p-4 sm:p-6 backdrop-blur-xl overflow-hidden origin-center"
           style={{ transformStyle: 'preserve-3d' }}
           animate={{
             scale,
@@ -158,10 +158,10 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
           transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         >
           {!isFlipped ? (
-            /* Front side with auto-fitting scale and large base font (matching WinUI FontSize="30") */
+            /* Front side with 2D auto-fitting scale filling the card */
             <div className="w-full h-full flex items-center justify-center p-2">
-              <AutoFitViewbox maxWidth={460} maxHeight={268}>
-                <div className="text-slate-100 font-medium text-center select-text max-w-full sm:max-w-[460px] text-2xl sm:text-3xl leading-snug">
+              <AutoFitViewbox maxWidth={480} maxHeight={275} allowUpscale={true} maxScale={2.0}>
+                <div className="text-slate-100 font-medium text-center select-text w-full max-w-[460px] text-2xl sm:text-3xl leading-snug">
                   <MarkdownRenderer content={card.front || 'Null'} />
                 </div>
               </AutoFitViewbox>
@@ -169,8 +169,8 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
           ) : (
             /* Back side rendered upside down so it flips right-side-up with auto-fitting scale */
             <div className="w-full h-full flex items-center justify-center [transform:rotateX(180deg)] p-2">
-              <AutoFitViewbox maxWidth={460} maxHeight={268}>
-                <div className="text-slate-100 font-normal text-center select-text max-w-full sm:max-w-[460px] text-lg sm:text-xl leading-relaxed">
+              <AutoFitViewbox maxWidth={480} maxHeight={275} allowUpscale={true} maxScale={1.8}>
+                <div className="text-slate-100 font-normal text-center select-text w-full max-w-[460px] text-lg sm:text-xl leading-relaxed">
                   <MarkdownRenderer content={card.back || 'Null'} />
                 </div>
               </AutoFitViewbox>

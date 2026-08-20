@@ -8,14 +8,18 @@ interface AutoFitViewboxProps {
   maxWidth?: number;
   className?: string;
   allowUpscale?: boolean;
+  minScale?: number;
+  maxScale?: number;
 }
 
 export const AutoFitViewbox: React.FC<AutoFitViewboxProps> = ({
   children,
-  maxHeight = 268,
-  maxWidth = 460,
+  maxHeight = 270,
+  maxWidth = 480,
   className = '',
-  allowUpscale = false,
+  allowUpscale = true,
+  minScale = 0.35,
+  maxScale = 2.2,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -28,52 +32,60 @@ export const AutoFitViewbox: React.FC<AutoFitViewboxProps> = ({
       if (!container || !content) return;
 
       // Available container bounds
-      const containerW = Math.min(maxWidth, container.clientWidth || maxWidth);
-      const containerH = Math.min(maxHeight, container.clientHeight || maxHeight);
+      const containerW = container.clientWidth || maxWidth;
+      const containerH = container.clientHeight || maxHeight;
 
-      // Natural unscaled content bounds
-      const contentW = content.scrollWidth;
-      const contentH = content.scrollHeight;
+      // Reset transform temporarily for true unscaled measurement
+      content.style.transform = 'none';
+      const contentW = content.scrollWidth || content.offsetWidth;
+      const contentH = content.scrollHeight || content.offsetHeight;
 
       if (contentW > 0 && contentH > 0 && containerW > 0 && containerH > 0) {
-        const scaleX = containerW / contentW;
-        const scaleY = containerH / contentH;
+        const scaleX = (containerW * 0.94) / contentW;
+        const scaleY = (containerH * 0.94) / contentH;
         let targetScale = Math.min(scaleX, scaleY);
 
         if (!allowUpscale) {
           targetScale = Math.min(1.0, targetScale);
         }
 
-        // Clamp scale to a readable minimum (0.35) and maximum
-        const finalScale = Math.max(0.35, Math.min(allowUpscale ? 1.5 : 1.0, targetScale));
+        // Clamp scale to readable limits
+        const finalScale = Math.max(minScale, Math.min(maxScale, targetScale));
         setScale(Number(finalScale.toFixed(3)));
+        content.style.transform = finalScale !== 1 ? `scale(${finalScale})` : 'none';
       } else {
         setScale(1);
+        content.style.transform = 'none';
       }
     };
 
     measure();
 
-    // Re-measure on resize or after web fonts/KaTeX math render
+    // Re-measure on resize and content changes (e.g. KaTeX math render, markdown tables, etc.)
     const resizeObserver = new ResizeObserver(() => measure());
     if (containerRef.current) resizeObserver.observe(containerRef.current);
     if (contentRef.current) resizeObserver.observe(contentRef.current);
 
-    const t1 = setTimeout(measure, 30);
-    const t2 = setTimeout(measure, 150);
+    const t1 = setTimeout(measure, 40);
+    const t2 = setTimeout(measure, 180);
 
     return () => {
       resizeObserver.disconnect();
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [children, maxHeight, maxWidth, allowUpscale]);
+  }, [children, maxHeight, maxWidth, allowUpscale, minScale, maxScale]);
 
   return (
     <div
       ref={containerRef}
-      style={{ maxHeight: `${maxHeight}px`, maxWidth: `${maxWidth}px` }}
-      className={`w-full h-full overflow-hidden flex items-center justify-center relative ${className}`}
+      style={{
+        maxHeight: `${maxHeight}px`,
+        maxWidth: `${maxWidth}px`,
+        width: '100%',
+        height: '100%',
+      }}
+      className={`overflow-hidden flex items-center justify-center relative ${className}`}
     >
       <div
         ref={contentRef}
@@ -81,8 +93,12 @@ export const AutoFitViewbox: React.FC<AutoFitViewboxProps> = ({
           transform: scale !== 1 ? `scale(${scale})` : 'none',
           transformOrigin: 'center center',
           width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-        className="w-full flex flex-col items-center justify-center transition-transform duration-150"
+        className="transition-transform duration-100 ease-out select-text"
       >
         {children}
       </div>
