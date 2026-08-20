@@ -193,9 +193,9 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
   );
 
   return (
-    <div className="flex-1 h-full flex flex-col justify-between items-center relative overflow-hidden select-none p-3 sm:p-6">
+    <div className="flex-1 h-full flex flex-col justify-between items-center relative overflow-hidden select-none p-3 sm:p-6 bg-transparent">
       {/* Dynamic Header: Deck Badge (Left) + Learning Progress (Dead-Center) + Card Counter & Shuffle (Right) */}
-      <div className="w-full flex items-center justify-between z-10 px-2 shrink-0 relative min-h-[36px]">
+      <div className="w-full flex items-center justify-between z-10 px-2 shrink-0 relative min-h-[36px] bg-transparent">
         {/* Left: Deck Badge */}
         <div className="px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded-md backdrop-blur-md text-xs font-medium text-slate-300 flex items-center space-x-1.5 max-w-[130px] sm:max-w-[220px] truncate z-10">
           <RefreshCw size={12} className="text-purple-400 shrink-0" />
@@ -203,7 +203,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
         </div>
 
         {/* Center: WinUI 3 Learning Progress Bar (Perfect Geometric Center Alignment) */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-10">
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center z-10 bg-transparent">
           <div
             className="flex items-center space-x-2 bg-slate-900/90 px-3 py-1 rounded-md border border-slate-800 shadow-sm"
             title={`Card learning progress: ${weightPercent}% (Weight: ${rawWeight})`}
@@ -220,7 +220,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
         </div>
 
         {/* Right: Shuffle & Counter Badge */}
-        <div className="flex items-center space-x-1.5 shrink-0 z-10">
+        <div className="flex items-center space-x-1.5 shrink-0 z-10 bg-transparent">
           <button
             onClick={() => {
               setQueue(shuffleCards(cardsToRevise));
@@ -239,7 +239,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
       </div>
 
       {/* Center Card Viewport (min-h-0 prevents card from overflowing and pushing buttons offscreen) */}
-      <div className="flex-1 min-h-0 w-full flex items-center justify-center py-2">
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center py-2 bg-transparent">
         <XamlCardControl
           cardNode={currentCardNode}
           isFlipped={isFlipped}
@@ -252,7 +252,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
       </div>
 
       {/* Rating Buttons Bar (Clean horizontal flex on PC, 2x2 grid on mobile) */}
-      <div className="w-full max-w-2xl z-20 pb-safe pb-1 sm:pb-2 shrink-0">
+      <div className="w-full max-w-2xl z-20 pb-safe pb-1 sm:pb-2 shrink-0 bg-transparent">
         {isFlipped ? (
           <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-center gap-2 sm:gap-3 transition-all animate-in fade-in slide-in-from-bottom-2">
             <button

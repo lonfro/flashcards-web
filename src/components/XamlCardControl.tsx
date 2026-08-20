@@ -98,12 +98,12 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
   return (
     <div
       ref={containerRef}
-      className="flex-1 h-full p-3 sm:p-6 flex flex-col justify-between items-center relative select-none overflow-hidden"
+      className="flex-1 h-full p-3 sm:p-6 flex flex-col justify-between items-center relative select-none overflow-hidden bg-transparent"
     >
       {/* Top Header: Progress Bar & Edit (e) / Zoom Control Buttons */}
-      <div className="w-full flex items-center justify-between z-10 min-h-[36px] sm:min-h-[40px]">
+      <div className="w-full flex items-center justify-between z-10 min-h-[36px] sm:min-h-[40px] bg-transparent">
         {showProgressBar ? (
-          <div className="flex flex-col items-start space-y-0.5 sm:space-y-1" title={`Learning progress: ${weightPercent}% (Weight: ${rawWeight})`}>
+          <div className="flex flex-col items-start space-y-0.5 sm:space-y-1 bg-transparent" title={`Learning progress: ${weightPercent}% (Weight: ${rawWeight})`}>
             <div className="flex items-center space-x-1.5">
               <span className="text-[11px] sm:text-xs text-slate-400 font-medium">Progress</span>
               <span className="text-[10px] font-mono text-slate-500">({weightPercent}%)</span>
@@ -120,7 +120,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
         )}
 
         {/* Right side controls: Zoom indicator & Edit button */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2">
+        <div className="flex items-center space-x-1.5 sm:space-x-2 bg-transparent">
           {scale !== 1.0 && (
             <button
               onClick={() => setScale(1.0)}
@@ -146,7 +146,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
       </div>
 
       {/* Center Responsive Card (with Zoom Scale & Flip 3D) */}
-      <div className="w-full my-auto perspective-1000 flex flex-col items-center justify-center px-1 sm:px-4 py-2">
+      <div className="w-full my-auto perspective-1000 flex flex-col items-center justify-center px-1 sm:px-4 py-2 bg-transparent">
         <motion.div
           onClick={onFlip}
           className="w-full max-w-[550px] min-h-[240px] sm:min-h-[325px] aspect-[550/325] cursor-pointer rounded-xl bg-slate-900 border border-slate-800 shadow-2xl relative flex flex-col justify-center items-center p-4 sm:p-6 backdrop-blur-xl overflow-hidden origin-center"
@@ -181,7 +181,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
 
       {/* Bottom Footer Hint */}
       {showFooterHint && (
-        <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium z-10 flex items-center space-x-1 shrink-0">
+        <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium z-10 flex items-center space-x-1 shrink-0 bg-transparent">
           <span>Tap card or press <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-mono text-[9px] sm:text-[10px]">Space</kbd> to flip</span>
         </div>
       )}
