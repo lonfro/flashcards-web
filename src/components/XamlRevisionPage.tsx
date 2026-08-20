@@ -4,6 +4,7 @@ import { RefreshCw, Trophy, RotateCcw, ArrowRight, Shuffle } from 'lucide-react'
 import { NodeData, Difficulty } from '../types/flashcard';
 import { CardSettingsData, DifficultySettingsData } from '../types/cardSettings';
 import { calculateNextReview } from '../utils/spacedRepetition';
+import { idbLogReview } from '../utils/db';
 import { XamlCardControl } from './XamlCardControl';
 
 interface XamlRevisionPageProps {
@@ -84,6 +85,28 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
       // Persist updated card weight to parent library
       onUpdateCard(updatedNode);
 
+      // Log review into IndexedDB study history
+      const diffNames: Record<Difficulty, 'Again' | 'Hard' | 'Good' | 'Easy'> = {
+        [Difficulty.Again]: 'Again',
+        [Difficulty.Hard]: 'Hard',
+        [Difficulty.Good]: 'Good',
+        [Difficulty.Easy]: 'Easy',
+      };
+
+      const now = new Date();
+      idbLogReview({
+        id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        cardId: current.id,
+        cardName: current.name || 'Flashcard',
+        deckId: selectedDividerNode ? selectedDividerNode.id : current.parentId,
+        deckName: selectedDividerNode ? selectedDividerNode.name : 'All Decks',
+        difficulty: Number(difficulty),
+        difficultyName: diffNames[difficulty] || 'Good',
+        reviewedAt: now.toISOString(),
+        date: now.toISOString().slice(0, 10),
+        weight: updates.weight ?? current.card.weight,
+      });
+
       // Update in local queue
       setQueue((prev) => {
         const next = [...prev];
@@ -103,7 +126,7 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
         setIsFinished(true);
       }
     },
-    [queue, currentIndex, cardSettings, difficultySettings, onUpdateCard]
+    [queue, currentIndex, cardSettings, difficultySettings, onUpdateCard, selectedDividerNode]
   );
 
   // Keyboard accelerators matching WinUI XAML

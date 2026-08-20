@@ -12,9 +12,10 @@ import {
   AlertCircle,
   Menu,
   BookOpen,
+  BarChart2,
 } from 'lucide-react';
 
-export type ActivePage = 'FlashcardsPage' | 'RevisionPage' | 'SettingsPage';
+export type ActivePage = 'FlashcardsPage' | 'RevisionPage' | 'StatsPage' | 'SettingsPage';
 export type SyncStatusState = 'idle' | 'syncing' | 'synced' | 'error' | 'unauthenticated';
 
 interface WinUITitleBarProps {
@@ -155,6 +156,18 @@ export const WinUITitleBar: React.FC<WinUITitleBarProps> = ({
           >
             <RefreshCw size={14} className="shrink-0" />
             <span>Revision</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('StatsPage')}
+            className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium flex items-center space-x-1.5 sm:space-x-2 transition-all ${
+              activePage === 'StatsPage'
+                ? 'bg-slate-800 text-emerald-300 font-semibold border-b-2 border-emerald-500 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <BarChart2 size={14} className="shrink-0" />
+            <span>Stats</span>
           </button>
         </nav>
 

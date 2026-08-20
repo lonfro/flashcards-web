@@ -1,8 +1,9 @@
 import { openDB, IDBPDatabase } from 'idb';
 import { NodeData } from '../types/flashcard';
+import { StudyLogEntry } from '../types/stats';
 
 const DB_NAME = 'flashcards_web';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface FlashcardsDB {
   nodes: {
@@ -13,6 +14,11 @@ export interface FlashcardsDB {
   meta: {
     key: string; // e.g. 'localHash', 'localModifiedAt'
     value: string;
+  };
+  study_logs: {
+    key: string; // StudyLogEntry.id
+    value: StudyLogEntry;
+    indexes: { 'by-date': string; 'by-cardId': string; 'by-deckId': string | null };
   };
 }
 
@@ -25,7 +31,7 @@ export function getDB(): Promise<IDBPDatabase<FlashcardsDB>> {
 
   if (!dbPromise) {
     dbPromise = openDB<FlashcardsDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion) {
         if (!db.objectStoreNames.contains('nodes')) {
           const store = db.createObjectStore('nodes', { keyPath: 'id' });
           store.createIndex('by-parent', 'parentId');
@@ -33,6 +39,12 @@ export function getDB(): Promise<IDBPDatabase<FlashcardsDB>> {
         }
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta');
+        }
+        if (!db.objectStoreNames.contains('study_logs')) {
+          const logStore = db.createObjectStore('study_logs', { keyPath: 'id' });
+          logStore.createIndex('by-date', 'date');
+          logStore.createIndex('by-cardId', 'cardId');
+          logStore.createIndex('by-deckId', 'deckId');
         }
       },
     });
@@ -138,5 +150,46 @@ export async function idbSetMeta(key: string, value: string): Promise<void> {
     await db.put('meta', value, key);
   } catch (error) {
     console.error(`Failed to set metadata [${key}] in IndexedDB:`, error);
+  }
+}
+
+/**
+ * Log a study session / card review entry
+ */
+export async function idbLogReview(entry: StudyLogEntry): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const db = await getDB();
+    await db.put('study_logs', entry);
+  } catch (error) {
+    console.error('Failed to log review to IndexedDB:', error);
+  }
+}
+
+/**
+ * Retrieve all study logs ordered chronologically (newest first)
+ */
+export async function idbGetStudyLogs(limit: number = 200): Promise<StudyLogEntry[]> {
+  if (typeof window === 'undefined') return [];
+  try {
+    const db = await getDB();
+    const all = await db.getAll('study_logs');
+    return all.sort((a, b) => new Date(b.reviewedAt).getTime() - new Date(a.reviewedAt).getTime()).slice(0, limit);
+  } catch (error) {
+    console.error('Failed to get study logs from IndexedDB:', error);
+    return [];
+  }
+}
+
+/**
+ * Clear all study log history
+ */
+export async function idbClearStudyLogs(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const db = await getDB();
+    await db.clear('study_logs');
+  } catch (error) {
+    console.error('Failed to clear study logs from IndexedDB:', error);
   }
 }

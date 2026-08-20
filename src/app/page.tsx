@@ -9,6 +9,7 @@ import { XamlCardControl } from '../components/XamlCardControl';
 import { XamlCardEditControl } from '../components/XamlCardEditControl';
 import { XamlCardAddControl } from '../components/XamlCardAddControl';
 import { XamlRevisionPage } from '../components/XamlRevisionPage';
+import { XamlStatsPage } from '../components/XamlStatsPage';
 import { XamlSettingsPage } from '../components/XamlSettingsPage';
 import { XamlGridSplitter } from '../components/XamlGridSplitter';
 
@@ -210,6 +211,13 @@ export default function HomePage() {
               handleUpdateNodes(updated);
             }}
             onGoToFlashcardsPage={() => handleNavigate('FlashcardsPage')}
+          />
+        )}
+
+        {activePage === 'StatsPage' && (
+          <XamlStatsPage
+            nodes={nodes}
+            onGoToRevision={() => handleNavigate('RevisionPage')}
           />
         )}
 

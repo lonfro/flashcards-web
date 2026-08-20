@@ -2,49 +2,18 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Folder,
-  FolderOpen,
-  FileText,
-  ChevronRight,
-  ChevronDown,
   Search,
   MoreVertical,
   FilePlus,
   FolderPlus,
-  Edit,
-  Trash,
-  RotateCcw,
   RefreshCw,
-  Download,
-  Upload,
-  ArrowUpDown,
-  Layers,
   X,
 } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
-
-interface XamlTreeViewProps {
-  nodes: NodeData[];
-  selectedNodeId: string | null;
-  width: number;
-  onSelectNode: (node: NodeData) => void;
-  onAddCard: (parentId: string | null) => void;
-  onAddDivider: (parentId: string | null) => void;
-  onReviseDivider: (node: NodeData | null) => void;
-  onEditCard: (node: NodeData) => void;
-  onRenameNode: (node: NodeData, newName: string) => void;
-  onDeleteNode: (nodeId: string) => void;
-  onResetWeights: (nodeId: string, recursive?: boolean) => void;
-  onExportDivider: (dividerId: string) => void;
-  onImportDivider: (e: React.ChangeEvent<HTMLInputElement>, targetParentId: string | null) => void;
-  onMoveNode: (draggedNodeId: string, targetParentId: string | null) => void;
-  onSortNodes: (recursive: boolean) => void;
-}
-
-interface TreeNode extends NodeData {
-  childrenNodes: TreeNode[];
-  cardCount: number;
-}
+import { TreeNode, XamlTreeViewProps } from './tree/types';
+import { TreeNodeItem } from './tree/TreeNodeItem';
+import { TreeSearchResults } from './tree/TreeSearchResults';
+import { TreeRootContextMenu } from './tree/TreeRootContextMenu';
 
 export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   nodes,
@@ -71,11 +40,11 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
 
-  // Root TreeView Right-Click Context Menu State
+  // Root Context Menu Flyout State
   const [isRootMenuOpen, setIsRootMenuOpen] = useState<boolean>(false);
   const [rootMenuPos, setRootMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Dismiss context flyouts on global click outside
+  // Dismiss context flyouts on click outside
   useEffect(() => {
     const handleClickOutside = () => {
       setActiveMenuNodeId(null);
@@ -143,7 +112,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     }));
   };
 
-  // Reveals the search result in the TreeView by expanding all ancestor folders, clearing search, and selecting it
+  // Reveals the search result in the TreeView by expanding all ancestor folders and selecting it
   const expandAncestorsAndSelect = (node: NodeData) => {
     const folderIdsToExpand: Record<string, boolean> = {};
     let currentParentId = node.parentId;
@@ -162,7 +131,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     onSelectNode(node);
   };
 
-  // Compute flat ordered list of currently visible nodes in the tree
+  // Compute flat ordered list of currently visible nodes for keyboard navigation
   const visibleNodes = useMemo(() => {
     const list: TreeNode[] = [];
     const traverse = (nodeList: TreeNode[]) => {
@@ -177,10 +146,9 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     return list;
   }, [treeData, expandedFolderIds]);
 
-  // Arrow Key Hotkeys for TreeView Navigation (1:1 WinUI 3 TreeView)
+  // Arrow Key Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input/textarea or renaming
       const target = e.target as HTMLElement | null;
       const targetTag = target?.tagName?.toLowerCase();
       if (targetTag === 'input' || targetTag === 'textarea' || editingNodeId) {
@@ -196,16 +164,12 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
           e.preventDefault();
           const nextIndex = currentIndex < 0 ? 0 : Math.min(visibleNodes.length - 1, currentIndex + 1);
           const targetNode = visibleNodes[nextIndex];
-          if (targetNode) {
-            onSelectNode(targetNode);
-          }
+          if (targetNode) onSelectNode(targetNode);
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
           const prevIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
           const targetNode = visibleNodes[prevIndex];
-          if (targetNode) {
-            onSelectNode(targetNode);
-          }
+          if (targetNode) onSelectNode(targetNode);
         } else if (e.key === 'ArrowRight') {
           const currentNode = visibleNodes[currentIndex];
           if (currentNode && currentNode.type === 'divider') {
@@ -224,9 +188,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               setExpandedFolderIds((prev) => ({ ...prev, [currentNode.id]: false }));
             } else if (currentNode.parentId) {
               const parentNode = nodes.find((n) => n.id === currentNode.parentId);
-              if (parentNode) {
-                onSelectNode(parentNode);
-              }
+              if (parentNode) onSelectNode(parentNode);
             }
           }
         }
@@ -283,281 +245,21 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     setDraggedNodeId(null);
   };
 
-  // Render individual tree item (Folder or Card)
-  const renderTreeNode = (node: TreeNode, depth: number = 0) => {
-    const isFolder = node.type === 'divider';
-    const isExpanded = !!expandedFolderIds[node.id];
-    const isSelected = selectedNodeId === node.id;
-    const isEditing = editingNodeId === node.id;
-    const isMenuOpen = activeMenuNodeId === node.id;
-    const isDragOver = dragOverFolderId === node.id;
-
-    return (
-      <div key={node.id} className="relative group">
-        <div
-          draggable={!isEditing}
-          onDragStart={(e) => handleDragStart(e, node)}
-          onDragOver={isFolder ? (e) => handleDragOver(e, node.id) : undefined}
-          onDragLeave={isFolder ? handleDragLeave : undefined}
-          onDrop={isFolder ? (e) => handleDrop(e, node.id) : undefined}
-          onClick={() => {
-            onSelectNode(node);
-            if (isFolder) toggleFolder(node.id);
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setIsRootMenuOpen(false);
-            setActiveMenuNodeId(node.id);
-          }}
-          style={{ paddingLeft: `${Math.max(8, depth * 14 + 6)}px` }}
-          className={`flex items-center justify-between h-9 sm:h-8 pr-2 rounded-md text-xs cursor-pointer transition-colors select-none relative shrink-0 ${
-            isSelected
-              ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500 shadow-sm'
-              : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-          } ${isDragOver ? 'bg-indigo-950/80 border border-indigo-500' : ''}`}
-        >
-          {/* Left item details: Chevron + Icon + Title */}
-          <div className="flex items-center space-x-1.5 flex-1 min-w-0 pr-1 h-full">
-            {isFolder ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFolder(node.id);
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-200 rounded shrink-0 touch-manipulation"
-              >
-                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-            ) : (
-              <span className="w-5 h-5 shrink-0" />
-            )}
-
-            {isFolder ? (
-              isExpanded ? (
-                <FolderOpen size={15} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} className="shrink-0" />
-              ) : (
-                <Folder size={15} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} className="shrink-0" />
-              )
-            ) : (
-              <FileText size={15} style={{ color: 'var(--color-card-icon, #818cf8)' }} className="shrink-0" />
-            )}
-
-            {isEditing ? (
-              <input
-                type="text"
-                autoFocus
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                onBlur={() => handleSaveRename(node)}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveRename(node);
-                  if (e.key === 'Escape') setEditingNodeId(null);
-                }}
-                className="bg-slate-950 border border-indigo-500 px-1.5 py-0.5 rounded text-xs text-slate-100 w-full focus:outline-none"
-              />
-            ) : (
-              <span className="truncate text-xs sm:text-[13px] leading-normal py-0.5">{node.name}</span>
-            )}
-          </div>
-
-          {/* Right badge & context menu toggle button */}
-          <div className="flex items-center space-x-1 shrink-0 ml-1">
-            {isFolder && node.cardCount > 0 && (
-              <span className="text-[10px] font-mono text-slate-400 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800">
-                {node.cardCount}
-              </span>
-            )}
-
-            {/* Context Flyout trigger (visible on mobile only, hidden on PC) */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsRootMenuOpen(false);
-                setActiveMenuNodeId(isMenuOpen ? null : node.id);
-              }}
-              className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 opacity-80 md:hidden transition-opacity touch-manipulation"
-              title="Item menu"
-            >
-              <MoreVertical size={14} />
-            </button>
-          </div>
-        </div>
-
-        {/* Context Menu Flyout */}
-        {isMenuOpen && (
-          <div
-            className="absolute left-6 sm:left-8 top-8 z-50 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {isFolder ? (
-              <>
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onAddCard(node.id);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <FilePlus size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} />
-                    <span>Add cards</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onAddDivider(node.id);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
-                    <span>Add new divider</span>
-                  </button>
-                </div>
-
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onReviseDivider(node);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-purple-300 font-semibold"
-                  >
-                    <RefreshCw size={14} />
-                    <span>Revise deck</span>
-                  </button>
-                </div>
-
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onResetWeights(node.id, false);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <RotateCcw size={14} className="text-slate-400" />
-                    <span>Reset card weights</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onResetWeights(node.id, true);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <RotateCcw size={14} className="text-slate-400" />
-                    <span>Reset weights (recursive)</span>
-                  </button>
-                </div>
-
-                <div className="py-1">
-                  <button
-                    onClick={() => handleStartRename(node)}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <Edit size={14} />
-                    <span>Rename divider</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onDeleteNode(node.id);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-rose-400"
-                  >
-                    <Trash size={14} />
-                    <span>Delete divider</span>
-                  </button>
-                </div>
-
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onExportDivider(node.id);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <Download size={14} />
-                    <span>Export divider</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onEditCard(node);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <Edit size={14} className="text-indigo-400" />
-                    <span>Edit card</span>
-                  </button>
-                  <button
-                    onClick={() => handleStartRename(node)}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <Edit size={14} />
-                    <span>Rename card</span>
-                  </button>
-                </div>
-
-                <div className="py-1">
-                  <button
-                    onClick={() => {
-                      onResetWeights(node.id, false);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-                  >
-                    <RotateCcw size={14} className="text-indigo-400" />
-                    <span>Reset card weight</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onDeleteNode(node.id);
-                      setActiveMenuNodeId(null);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-rose-400"
-                  >
-                    <Trash size={14} />
-                    <span>Delete card</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Render Folder Children */}
-        {isFolder && isExpanded && node.childrenNodes.length > 0 && (
-          <div className="border-l border-slate-800 ml-3.5 my-0.5">
-            {node.childrenNodes.map((child) => renderTreeNode(child, depth + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div
       onContextMenu={(e) => {
         e.preventDefault();
         setActiveMenuNodeId(null);
-        setRootMenuPos({ x: Math.min(e.clientX, window.innerWidth - 240), y: Math.min(e.clientY, window.innerHeight - 300) });
+        setRootMenuPos({
+          x: Math.min(e.clientX, window.innerWidth - 240),
+          y: Math.min(e.clientY, window.innerHeight - 300),
+        });
         setIsRootMenuOpen(true);
       }}
       className="bg-slate-900/90 border-r border-slate-800 h-full flex flex-col shrink-0 select-none relative w-full md:w-[var(--sidebar-width)]"
       style={{ '--sidebar-width': `${width}px` } as React.CSSProperties}
     >
-      {/* Top Search TextBox */}
+      {/* Search Input Bar */}
       <div className="p-2 border-b border-slate-800/80" onClick={(e) => e.stopPropagation()}>
         <div className="relative">
           <input
@@ -580,54 +282,69 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
         </div>
       </div>
 
-      {/* Main Tree Scroll Container */}
+      {/* Main Tree Viewport */}
       <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 touch-pan-y">
         {searchQuery.trim() ? (
-          <div className="space-y-1">
-            <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Search Results ({searchResults.length})</span>
-              <button
-                onClick={() => setSearchQuery('')}
-                className="text-[10px] text-indigo-400 hover:underline cursor-pointer lowercase font-normal"
-              >
-                close
-              </button>
-            </div>
-            {searchResults.length === 0 ? (
-              <div className="px-2 py-6 text-xs text-slate-500 italic text-center">
-                No matching cards found.
-              </div>
-            ) : (
-              searchResults.map((cardNode) => (
-                <div
-                  key={cardNode.id}
-                  onClick={() => expandAncestorsAndSelect(cardNode)}
-                  className={`flex items-center space-x-2 py-2.5 sm:py-1.5 px-2.5 rounded text-xs cursor-pointer transition-colors ${
-                    selectedNodeId === cardNode.id
-                      ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500'
-                      : 'text-slate-300 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <FileText size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} className="shrink-0" />
-                  <span className="truncate">{cardNode.name}</span>
-                </div>
-              ))
-            )}
-          </div>
+          <TreeSearchResults
+            searchResults={searchResults}
+            selectedNodeId={selectedNodeId}
+            onSelectResult={expandAncestorsAndSelect}
+            onClearSearch={() => setSearchQuery('')}
+          />
         ) : treeData.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-6 text-center text-slate-500 space-y-3">
             <FolderPlus size={32} className="opacity-40" />
             <p className="text-xs">No decks or cards yet.</p>
           </div>
         ) : (
-          treeData.map((rootNode) => renderTreeNode(rootNode, 0))
+          treeData.map((rootNode) => (
+            <TreeNodeItem
+              key={rootNode.id}
+              node={rootNode}
+              depth={0}
+              selectedNodeId={selectedNodeId}
+              expandedFolderIds={expandedFolderIds}
+              editingNodeId={editingNodeId}
+              editingName={editingName}
+              activeMenuNodeId={activeMenuNodeId}
+              dragOverFolderId={dragOverFolderId}
+              onSelectNode={onSelectNode}
+              onToggleFolder={toggleFolder}
+              onStartRename={handleStartRename}
+              onSaveRename={handleSaveRename}
+              onCancelRename={() => setEditingNodeId(null)}
+              onEditingNameChange={setEditingName}
+              onOpenMenu={(id) => {
+                setIsRootMenuOpen(false);
+                setActiveMenuNodeId(id);
+              }}
+              onCloseMenu={() => setActiveMenuNodeId(null)}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onAddCard={onAddCard}
+              onAddDivider={onAddDivider}
+              onReviseDivider={onReviseDivider}
+              onEditCard={onEditCard}
+              onDeleteNode={onDeleteNode}
+              onResetWeights={onResetWeights}
+              onExportDivider={onExportDivider}
+            />
+          ))
         )}
       </div>
 
-      {/* Mobile-Friendly Bottom Quick Actions Toolbar (hidden on PC) */}
+      {/* Mobile-Friendly Toolbar */}
       <div className="p-2 pb-safe border-t border-slate-800/80 bg-slate-950/90 flex md:hidden items-center justify-around gap-1 shrink-0">
         <button
-          onClick={() => onAddCard(selectedNodeId && nodes.find((n) => n.id === selectedNodeId)?.type === 'divider' ? selectedNodeId : null)}
+          onClick={() =>
+            onAddCard(
+              selectedNodeId && nodes.find((n) => n.id === selectedNodeId)?.type === 'divider'
+                ? selectedNodeId
+                : null
+            )
+          }
           className="flex-1 py-2 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 shadow-sm touch-manipulation"
         >
           <FilePlus size={14} />
@@ -660,102 +377,18 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
         </button>
       </div>
 
-      {/* Root / Global Context Menu Flyout */}
+      {/* Root Context Menu */}
       {isRootMenuOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            left: `${Math.min(rootMenuPos.x, window.innerWidth - 250)}px`,
-            top: `${Math.min(rootMenuPos.y, window.innerHeight - 280)}px`,
-          }}
-          className="z-50 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onAddCard(null);
-                setIsRootMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <FilePlus size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} />
-              <span>Add cards (Root)</span>
-            </button>
-            <button
-              onClick={() => {
-                onAddDivider(null);
-                setIsRootMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
-              <span>Add new deck</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onReviseDivider(null);
-                setIsRootMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-purple-300 font-semibold"
-            >
-              <RefreshCw size={14} />
-              <span>Revise all cards (Cram)</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onSortNodes(false);
-                setIsRootMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <ArrowUpDown size={14} />
-              <span>Sort alphabetically</span>
-            </button>
-            <button
-              onClick={() => {
-                onSortNodes(true);
-                setIsRootMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <Layers size={14} />
-              <span>Sort alphabetically (recursive)</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <label className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 cursor-pointer">
-              <Upload size={14} />
-              <span>Import JSON</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={(e) => {
-                  onImportDivider(e, null);
-                  setIsRootMenuOpen(false);
-                }}
-                className="hidden"
-              />
-            </label>
-            <button
-              onClick={() => {
-                onExportDivider('');
-                setIsRootMenuOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <Download size={14} />
-              <span>Export JSON</span>
-            </button>
-          </div>
-        </div>
+        <TreeRootContextMenu
+          position={rootMenuPos}
+          onClose={() => setIsRootMenuOpen(false)}
+          onAddCard={onAddCard}
+          onAddDivider={onAddDivider}
+          onReviseDivider={() => onReviseDivider(null)}
+          onSortNodes={onSortNodes}
+          onImportDivider={onImportDivider}
+          onExportDivider={onExportDivider}
+        />
       )}
     </div>
   );

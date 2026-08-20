@@ -177,62 +177,30 @@ export function loginViaServerlessPopup(
 }
 
 /**
- * Request OAuth 2.0 Access Token via Google Identity Services
+ * Request OAuth 2.0 Access Token via Serverless Popup
  */
 export function requestGoogleDriveToken(
-  clientId: string,
-  onSuccess: (accessToken: string) => void,
-  onError: (err: string) => void,
-  prompt: string = 'select_account'
+  clientId?: string,
+  onSuccess?: (accessToken: string) => void,
+  onError?: (err: string) => void,
+  _prompt?: string
 ): void {
   if (typeof window === 'undefined') return;
 
-  try {
-    localStorage.setItem(STORAGE_CLIENT_ID_KEY, clientId);
-  } catch (e) {}
-
-  const handleInit = () => {
+  if (clientId) {
     try {
-      const client = (window as any).google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: DRIVE_SCOPE,
-        prompt: prompt,
-        callback: (response: any) => {
-          if (response.error) {
-            onError(response.error_description || response.error);
-          } else if (response.access_token) {
-            const expiresIn = response.expires_in ? parseInt(response.expires_in, 10) : 3600;
-            saveStoredToken(response.access_token, expiresIn);
-            onSuccess(response.access_token);
-          }
-        },
-      });
-      client.requestAccessToken({ prompt: prompt });
-    } catch (initErr: any) {
-      onError(initErr.message || 'OAuth Client Initialization failed');
-    }
-  };
-
-  if (!(window as any).google?.accounts?.oauth2) {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = handleInit;
-    script.onerror = () => {
-      onError('Failed to load Google Identity Services SDK.');
-    };
-    document.body.appendChild(script);
-  } else {
-    handleInit();
+      localStorage.setItem(STORAGE_CLIENT_ID_KEY, clientId);
+    } catch (e) {}
   }
+
+  loginViaServerlessPopup(clientId, onSuccess, onError);
 }
 
 /**
- * Silently refresh OAuth 2.0 Access Token without popups
+ * Silently refresh OAuth 2.0 Access Token via serverless cookie without popups
  */
 export async function requestSilentGoogleDriveToken(
-  clientId: string,
+  _clientId: string,
   onSuccess: (accessToken: string) => void,
   onError: (err: string) => void
 ): Promise<void> {
@@ -244,8 +212,7 @@ export async function requestSilentGoogleDriveToken(
     }
   } catch (e) {}
 
-  // Fallback to GIS silent prompt
-  requestGoogleDriveToken(clientId, onSuccess, onError, 'none');
+  onError('Silent refresh unavailable');
 }
 
 /**
