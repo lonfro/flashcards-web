@@ -146,7 +146,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
       </div>
 
       {/* Center Responsive Card (with Zoom Scale & Flip 3D) */}
-      <div className="w-full my-auto perspective-1000 flex flex-col items-center justify-center px-1 sm:px-4 py-2 bg-transparent">
+      <div className="w-full my-auto perspective-1000 flex flex-col items-center justify-center px-1 sm:px-4 py-2 bg-transparent overflow-hidden flex-1 min-h-0">
         <motion.div
           onClick={onFlip}
           className="w-full max-w-[550px] min-h-[240px] sm:min-h-[325px] aspect-[550/325] cursor-pointer rounded-xl bg-slate-900 border border-slate-800 shadow-2xl relative flex flex-col justify-center items-center p-4 sm:p-6 backdrop-blur-xl overflow-hidden origin-center"

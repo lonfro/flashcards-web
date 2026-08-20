@@ -238,8 +238,8 @@ export const XamlRevisionPage: React.FC<XamlRevisionPageProps> = ({
         </div>
       </div>
 
-      {/* Center Card Viewport (min-h-0 prevents card from overflowing and pushing buttons offscreen) */}
-      <div className="flex-1 min-h-0 w-full flex items-center justify-center py-2 bg-transparent">
+      {/* Center Card Viewport (overflow-hidden clips scaled card content to this region only) */}
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center py-2 bg-transparent overflow-hidden">
         <XamlCardControl
           cardNode={currentCardNode}
           isFlipped={isFlipped}
