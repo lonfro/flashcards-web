@@ -21,7 +21,7 @@ interface TreeNodeItemProps {
   editingNodeId: string | null;
   editingName: string;
   activeMenuNodeId: string | null;
-  dragOverFolderId: string | null;
+  dropTarget: { nodeId: string; position: 'before' | 'after' | 'into' } | null;
   onSelectNode: (node: NodeData) => void;
   onToggleFolder: (folderId: string) => void;
   onStartRename: (node: NodeData) => void;
@@ -31,9 +31,9 @@ interface TreeNodeItemProps {
   onOpenMenu: (nodeId: string) => void;
   onCloseMenu: () => void;
   onDragStart: (e: React.DragEvent, node: NodeData) => void;
-  onDragOver: (e: React.DragEvent, folderId: string) => void;
+  onDragOver: (e: React.DragEvent, nodeId: string, isFolder: boolean) => void;
   onDragLeave: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent, targetFolderId: string) => void;
+  onDrop: (e: React.DragEvent, nodeId: string, isFolder: boolean) => void;
   onAddCard: (parentId: string | null) => void;
   onAddDivider: (parentId: string | null) => void;
   onReviseDivider: (node: NodeData | null) => void;
@@ -51,7 +51,7 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   editingNodeId,
   editingName,
   activeMenuNodeId,
-  dragOverFolderId,
+  dropTarget,
   onSelectNode,
   onToggleFolder,
   onStartRename,
@@ -77,16 +77,24 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   const isSelected = selectedNodeId === node.id;
   const isEditing = editingNodeId === node.id;
   const isMenuOpen = activeMenuNodeId === node.id;
-  const isDragOver = dragOverFolderId === node.id;
+
+  const isDropBefore = dropTarget?.nodeId === node.id && dropTarget.position === 'before';
+  const isDropAfter = dropTarget?.nodeId === node.id && dropTarget.position === 'after';
+  const isDropInto = dropTarget?.nodeId === node.id && dropTarget.position === 'into';
 
   return (
     <div className="relative group">
+      {/* Drop indicator: before */}
+      {isDropBefore && (
+        <div className="absolute top-0 left-2 right-2 h-0.5 bg-indigo-400 rounded-full z-10 pointer-events-none" />
+      )}
+
       <div
         draggable={!isEditing}
         onDragStart={(e) => onDragStart(e, node)}
-        onDragOver={isFolder ? (e) => onDragOver(e, node.id) : undefined}
-        onDragLeave={isFolder ? onDragLeave : undefined}
-        onDrop={isFolder ? (e) => onDrop(e, node.id) : undefined}
+        onDragOver={(e) => onDragOver(e, node.id, isFolder)}
+        onDragLeave={onDragLeave}
+        onDrop={(e) => onDrop(e, node.id, isFolder)}
         onClick={() => {
           onSelectNode(node);
           if (isFolder) onToggleFolder(node.id);
@@ -101,7 +109,7 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
           isSelected
             ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500 shadow-sm'
             : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-        } ${isDragOver ? 'bg-indigo-950/80 border border-indigo-500' : ''}`}
+        } ${isDropInto ? 'bg-indigo-950/80 ring-1 ring-indigo-500' : ''}`}
       >
         {/* Left item details: Chevron + Icon + Title */}
         <div className="flex items-center space-x-1.5 flex-1 min-w-0 pr-1 h-full">
@@ -176,6 +184,11 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
         </div>
       </div>
 
+      {/* Drop indicator: after */}
+      {isDropAfter && (
+        <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-400 rounded-full z-10 pointer-events-none" />
+      )}
+
       {/* Context Menu Flyout */}
       {isMenuOpen && (
         <TreeNodeContextMenu
@@ -205,7 +218,7 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
               editingNodeId={editingNodeId}
               editingName={editingName}
               activeMenuNodeId={activeMenuNodeId}
-              dragOverFolderId={dragOverFolderId}
+              dropTarget={dropTarget}
               onSelectNode={onSelectNode}
               onToggleFolder={onToggleFolder}
               onStartRename={onStartRename}

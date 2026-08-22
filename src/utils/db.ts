@@ -53,13 +53,15 @@ export function getDB(): Promise<IDBPDatabase<FlashcardsDB>> {
 }
 
 /**
- * Read all nodes as a flat array
+ * Read all nodes as a flat array, ordered by their stored sortOrder
  */
 export async function idbGetNodes(): Promise<NodeData[]> {
   if (typeof window === 'undefined') return [];
   try {
     const db = await getDB();
-    return await db.getAll('nodes');
+    const all = await db.getAll('nodes');
+    // Restore the exact order nodes were saved in
+    return all.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   } catch (error) {
     console.error('Failed to get nodes from IndexedDB:', error);
     return [];
@@ -67,7 +69,8 @@ export async function idbGetNodes(): Promise<NodeData[]> {
 }
 
 /**
- * Write the full node array atomically in one transaction
+ * Write the full node array atomically in one transaction.
+ * Stamps each node with its array index as sortOrder so order survives reload.
  */
 export async function idbSaveNodes(nodes: NodeData[]): Promise<void> {
   if (typeof window === 'undefined') return;
@@ -75,8 +78,8 @@ export async function idbSaveNodes(nodes: NodeData[]): Promise<void> {
     const db = await getDB();
     const tx = db.transaction('nodes', 'readwrite');
     await tx.store.clear();
-    for (const node of nodes) {
-      await tx.store.put(node);
+    for (let i = 0; i < nodes.length; i++) {
+      await tx.store.put({ ...nodes[i], sortOrder: i });
     }
     await tx.done;
   } catch (error) {

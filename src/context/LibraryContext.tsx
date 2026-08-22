@@ -37,7 +37,7 @@ export interface LibraryContextValue {
   handleExportAll: (dividerId?: string) => void;
   handleImportAll: (e: React.ChangeEvent<HTMLInputElement>, targetParentId?: string | null) => void;
   handleResetAll: () => Promise<void>;
-  handleMoveNode: (draggedNodeId: string, targetParentId: string | null) => void;
+  handleMoveNode: (draggedNodeId: string, targetNodeId: string | null, dropPosition?: 'before' | 'after' | 'into') => void;
   handleSortNodes: (recursive: boolean) => void;
   registerSyncListener: (listener: (nodes: NodeData[]) => void) => () => void;
 }
@@ -361,8 +361,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [handleUpdateNodes, setMobileView]);
 
   const handleMoveNode = useCallback(
-    (draggedNodeId: string, targetParentId: string | null) => {
-      if (draggedNodeId === targetParentId) return;
+    (draggedNodeId: string, targetNodeId: string | null, dropPosition?: 'before' | 'after' | 'into') => {
+      if (draggedNodeId === targetNodeId) return;
 
       const isDescendant = (id: string, ancestorId: string): boolean => {
         const current = nodes.find((n) => n.id === id);
@@ -371,13 +371,51 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         return isDescendant(current.parentId, ancestorId);
       };
 
+      // 'into' = drop onto a folder → change parentId only (old behaviour)
+      if (dropPosition === 'into' || !dropPosition) {
+        if (targetNodeId && isDescendant(targetNodeId, draggedNodeId)) return;
+        const updated = nodes.map((n) =>
+          n.id === draggedNodeId ? { ...n, parentId: targetNodeId, updatedAt: new Date().toISOString() } : n
+        );
+        handleUpdateNodes(updated);
+        return;
+      }
+
+      // 'before' / 'after' = reorder within the same sibling group
+      const draggedNode = nodes.find((n) => n.id === draggedNodeId);
+      const targetNode = targetNodeId ? nodes.find((n) => n.id === targetNodeId) : null;
+      if (!draggedNode) return;
+
+      const targetParentId = targetNode ? targetNode.parentId : null;
+
+      // Prevent dropping into own descendant
       if (targetParentId && isDescendant(targetParentId, draggedNodeId)) return;
 
-      const updated = nodes.map((n) =>
-        n.id === draggedNodeId ? { ...n, parentId: targetParentId, updatedAt: new Date().toISOString() } : n
-      );
+      // Build the new flat node list:
+      // 1. Remove dragged node from its current position
+      const withoutDragged = nodes.filter((n) => n.id !== draggedNodeId);
+      const updatedDragged = { ...draggedNode, parentId: targetParentId, updatedAt: new Date().toISOString() };
 
-      handleUpdateNodes(updated);
+      if (!targetNodeId) {
+        // Drop on root with no specific target → append to end of root
+        handleUpdateNodes([...withoutDragged, updatedDragged]);
+        return;
+      }
+
+      const targetIdx = withoutDragged.findIndex((n) => n.id === targetNodeId);
+      if (targetIdx === -1) {
+        handleUpdateNodes([...withoutDragged, updatedDragged]);
+        return;
+      }
+
+      // Insert before or after target
+      const insertAt = dropPosition === 'before' ? targetIdx : targetIdx + 1;
+      const reordered = [
+        ...withoutDragged.slice(0, insertAt),
+        updatedDragged,
+        ...withoutDragged.slice(insertAt),
+      ];
+      handleUpdateNodes(reordered);
     },
     [nodes, handleUpdateNodes]
   );

@@ -38,7 +38,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   const [editingName, setEditingName] = useState<string>('');
   const [activeMenuNodeId, setActiveMenuNodeId] = useState<string | null>(null);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
-  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'into' } | null>(null);
 
   // Root Context Menu Flyout State
   const [isRootMenuOpen, setIsRootMenuOpen] = useState<boolean>(false);
@@ -220,29 +220,60 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, folderId: string) => {
+  const handleDragOver = (e: React.DragEvent, targetNodeId: string, isFolder: boolean) => {
     e.preventDefault();
     e.stopPropagation();
-    if (draggedNodeId && draggedNodeId !== folderId) {
-      setDragOverFolderId(folderId);
-      e.dataTransfer.dropEffect = 'move';
+    if (!draggedNodeId || draggedNodeId === targetNodeId) return;
+    e.dataTransfer.dropEffect = 'move';
+
+    // Determine drop zone: top 25% = before, bottom 25% = after, middle 50% = into (folders only)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const relY = offsetY / rect.height;
+
+    let position: 'before' | 'after' | 'into';
+    if (isFolder && relY > 0.25 && relY < 0.75) {
+      position = 'into';
+    } else if (relY <= 0.5) {
+      position = 'before';
+    } else {
+      position = 'after';
     }
+
+    setDropTarget({ nodeId: targetNodeId, position });
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverFolderId(null);
+    setDropTarget(null);
   };
 
-  const handleDrop = (e: React.DragEvent, targetFolderId: string) => {
+  const handleDrop = (e: React.DragEvent, targetNodeId: string, isFolder: boolean) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverFolderId(null);
-    if (draggedNodeId && draggedNodeId !== targetFolderId) {
-      onMoveNode(draggedNodeId, targetFolderId);
-    }
+    const target = dropTarget;
+    setDropTarget(null);
     setDraggedNodeId(null);
+
+    if (!draggedNodeId || draggedNodeId === targetNodeId) return;
+
+    if (target && target.nodeId === targetNodeId) {
+      onMoveNode(draggedNodeId, targetNodeId, target.position);
+    } else {
+      // Fallback: folder drop without a tracked zone → 'into'
+      if (isFolder) onMoveNode(draggedNodeId, targetNodeId, 'into');
+    }
+  };
+
+  // Drop on the root container (between all root items) → append to root
+  const handleRootDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggedNodeId) return;
+    setDropTarget(null);
+    const id = draggedNodeId;
+    setDraggedNodeId(null);
+    onMoveNode(id, null, 'after');
   };
 
   return (
@@ -283,7 +314,11 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
       </div>
 
       {/* Main Tree Viewport */}
-      <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 touch-pan-y">
+      <div
+        className="flex-1 overflow-y-auto p-1.5 space-y-0.5 touch-pan-y"
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+        onDrop={handleRootDrop}
+      >
         {searchQuery.trim() ? (
           <TreeSearchResults
             searchResults={searchResults}
@@ -307,7 +342,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               editingNodeId={editingNodeId}
               editingName={editingName}
               activeMenuNodeId={activeMenuNodeId}
-              dragOverFolderId={dragOverFolderId}
+              dropTarget={dropTarget}
               onSelectNode={onSelectNode}
               onToggleFolder={toggleFolder}
               onStartRename={handleStartRename}

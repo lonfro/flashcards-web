@@ -19,6 +19,6 @@ export interface XamlTreeViewProps {
   onResetWeights: (nodeId: string, recursive?: boolean) => void;
   onExportDivider: (dividerId: string) => void;
   onImportDivider: (e: React.ChangeEvent<HTMLInputElement>, targetParentId: string | null) => void;
-  onMoveNode: (draggedNodeId: string, targetParentId: string | null) => void;
+  onMoveNode: (draggedNodeId: string, targetNodeId: string | null, dropPosition?: 'before' | 'after' | 'into') => void;
   onSortNodes: (recursive: boolean) => void;
 }

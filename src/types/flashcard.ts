@@ -35,6 +35,7 @@ export interface NodeData {
   parentId: string | null; // Null means top-level deck or folder
   createdAt: string;
   updatedAt: string;
+  sortOrder?: number;       // Explicit position index for stable ordering across reloads
   card?: CardData;
   divider?: DividerData;
 }
