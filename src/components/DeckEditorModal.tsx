@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, FolderPlus, Palette } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
 
@@ -22,34 +22,27 @@ const COLOR_OPTIONS = [
   { name: 'Rose', value: 'rose', bg: 'bg-rose-600' },
 ];
 
-export const DeckEditorModal: React.FC<DeckEditorModalProps> = ({
-  isOpen,
+export const DeckEditorModal: React.FC<DeckEditorModalProps> = ({ isOpen, ...props }) => {
+  if (!isOpen) return null;
+  return (
+    <DeckEditorForm
+      key={JSON.stringify([props.editingDeckNode?.id, props.defaultParentId])}
+      {...props}
+    />
+  );
+};
+
+function DeckEditorForm({
   onClose,
   onSaveDeck,
   editingDeckNode,
   availableDecks,
   defaultParentId = null,
-}) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [color, setColor] = useState('indigo');
-  const [parentId, setParentId] = useState<string | null>(defaultParentId);
-
-  useEffect(() => {
-    if (editingDeckNode) {
-      setName(editingDeckNode.name);
-      setDescription(editingDeckNode.divider?.description || '');
-      setColor(editingDeckNode.divider?.color || 'indigo');
-      setParentId(editingDeckNode.parentId);
-    } else {
-      setName('');
-      setDescription('');
-      setColor('indigo');
-      setParentId(defaultParentId);
-    }
-  }, [editingDeckNode, defaultParentId, isOpen]);
-
-  if (!isOpen) return null;
+}: Omit<DeckEditorModalProps, 'isOpen'>) {
+  const [name, setName] = useState(editingDeckNode?.name ?? '');
+  const [description, setDescription] = useState(editingDeckNode?.divider?.description || '');
+  const [color, setColor] = useState(editingDeckNode?.divider?.color || 'indigo');
+  const [parentId, setParentId] = useState(editingDeckNode ? editingDeckNode.parentId : defaultParentId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,4 +173,4 @@ export const DeckEditorModal: React.FC<DeckEditorModalProps> = ({
       </div>
     </div>
   );
-};
+}

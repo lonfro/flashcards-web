@@ -1,6 +1,4 @@
-import { NodeData, CardData, DividerData } from '../types/flashcard';
-
-const STORAGE_KEY = 'flashcards_web_nodes_v1';
+import { NodeData } from '../types/flashcard';
 
 export const INITIAL_SAMPLE_NODES: NodeData[] = [
   // Folder: C# & .NET 10 Development
@@ -195,4 +193,18 @@ export function getAllCardsInDeck(nodes: NodeData[], deckNodeId: string | null):
 
   collect(deckNodeId);
   return result;
+}
+
+
+export function getDividerPath(nodes: NodeData[], dividerId: string | null): string {
+  const names: string[] = [];
+  const visited = new Set<string>();
+  while (dividerId && !visited.has(dividerId)) {
+    visited.add(dividerId);
+    const divider = nodes.find((node) => node.id === dividerId && node.type === 'divider');
+    if (!divider) break;
+    names.unshift(divider.name);
+    dividerId = divider.parentId;
+  }
+  return names.join(' / ');
 }

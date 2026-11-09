@@ -6,8 +6,7 @@ import {
   CardSettingsData,
   DifficultySettingsData,
   calculateDaysToForget,
-  DEFAULT_CARD_SETTINGS,
-  DEFAULT_DIFFICULTY_SETTINGS,
+  REVISION_RATINGS,
 } from '../types/cardSettings';
 
 interface CardSettingsSectionProps {
@@ -17,6 +16,38 @@ interface CardSettingsSectionProps {
   onUpdateDifficultySettings: (newSettings: DifficultySettingsData) => void;
   onResetCardSettings: () => void;
   onResetDifficultySettings: () => void;
+}
+
+export function DurationInput({ minutes, label, onChange }: {
+  minutes: number;
+  label: string;
+  onChange: (minutes: number) => void;
+}) {
+  const units = [
+    { name: 'Days', size: 1440, limit: 365, value: Math.floor(minutes / 1440) },
+    { name: 'Hours', size: 60, limit: 23, value: Math.floor(minutes / 60) % 24 },
+    { name: 'Minutes', size: 1, limit: 59, value: minutes % 60 },
+  ];
+  return (
+    <div role="group" aria-label={label} className="grid grid-cols-3 gap-1">
+      {units.map(({ name, size, limit, value }) => (
+        <label key={name} className="text-xs text-slate-400">
+          {name}
+          <input
+            type="number"
+            min="0"
+            max={limit}
+            value={value}
+            onChange={(event) => {
+              const next = Math.max(0, Math.min(limit, Math.round(event.target.valueAsNumber || 0)));
+              onChange(minutes + (next - value) * size);
+            }}
+            className="mt-1 w-full min-w-0 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200"
+          />
+        </label>
+      ))}
+    </div>
+  );
 }
 
 export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
@@ -42,9 +73,9 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
           <div className="flex items-center space-x-2">
             <Sliders size={18} className="text-purple-400" />
             <div>
-              <h3 className="text-sm font-bold text-slate-100">Difficulty Weights</h3>
+              <h3 className="text-sm font-bold text-slate-100">Revision Difficulty</h3>
               <p className="text-xs text-slate-400">
-                Edit weight changes for each difficulty level. Higher weight = higher chance of reappearing.
+                Set the weight change and time before a card can reappear for each rating.
               </p>
             </div>
           </div>
@@ -58,81 +89,32 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-rose-400">Again (Horrible)</span>
-              <p className="text-[10px] text-slate-500">Weight delta when answered incorrectly</p>
-            </div>
-            <input
-              type="number"
-              step="0.1"
-              value={difficultySettings.againDelta}
-              onChange={(e) =>
-                onUpdateDifficultySettings({
-                  ...difficultySettings,
-                  againDelta: parseFloat(e.target.value) || 0,
-                })
-              }
-              className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-rose-300 focus:outline-none focus:border-rose-500"
-            />
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-amber-400">Hard (Bad)</span>
-              <p className="text-[10px] text-slate-500">Weight delta when answered hard</p>
-            </div>
-            <input
-              type="number"
-              step="0.1"
-              value={difficultySettings.hardDelta}
-              onChange={(e) =>
-                onUpdateDifficultySettings({
-                  ...difficultySettings,
-                  hardDelta: parseFloat(e.target.value) || 0,
-                })
-              }
-              className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-amber-300 focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-indigo-400">Good (Good)</span>
-              <p className="text-[10px] text-slate-500">Weight delta when answered good</p>
-            </div>
-            <input
-              type="number"
-              step="0.1"
-              value={difficultySettings.goodDelta}
-              onChange={(e) =>
-                onUpdateDifficultySettings({
-                  ...difficultySettings,
-                  goodDelta: parseFloat(e.target.value) || 0,
-                })
-              }
-              className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-indigo-300 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-emerald-400">Easy (Excellent)</span>
-              <p className="text-[10px] text-slate-500">Weight delta when answered easy</p>
-            </div>
-            <input
-              type="number"
-              step="0.1"
-              value={difficultySettings.easyDelta}
-              onChange={(e) =>
-                onUpdateDifficultySettings({
-                  ...difficultySettings,
-                  easyDelta: parseFloat(e.target.value) || 0,
-                })
-              }
-              className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-emerald-300 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
+          {REVISION_RATINGS.map(({ name, color, weight, delay }) => (
+            <fieldset key={name} className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+              <legend className="px-1 text-xs font-semibold" style={{ color }}>{name}</legend>
+              <label className="flex items-center justify-between gap-2 text-xs text-slate-300">
+                Weight change
+                <input
+                  type="number"
+                  step="0.01"
+                  value={difficultySettings[weight]}
+                  onChange={(e) => onUpdateDifficultySettings({
+                    ...difficultySettings,
+                    [weight]: e.target.valueAsNumber || 0,
+                  })}
+                  className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right"
+                />
+              </label>
+              <div className="space-y-1">
+                <p className="text-xs text-slate-300">Hide card for</p>
+                <DurationInput
+                  label={`${name} delay`}
+                  minutes={difficultySettings[delay]}
+                  onChange={(minutes) => onUpdateDifficultySettings({ ...difficultySettings, [delay]: minutes })}
+                />
+              </div>
+            </fieldset>
+          ))}
         </div>
       </div>
 
@@ -173,7 +155,9 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
               onChange={(e) =>
                 onUpdateCardSettings({
                   ...cardSettings,
-                  defaultWeight: parseFloat(e.target.value) || 20.0,
+                  defaultWeight: Math.min(cardSettings.maximumWeight, Math.max(
+                    cardSettings.minimumWeight, e.target.valueAsNumber || cardSettings.minimumWeight
+                  )),
                 })
               }
               className="w-24 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
@@ -192,12 +176,14 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
                 step="0.5"
                 min="0.1"
                 value={cardSettings.minimumWeight}
-                onChange={(e) =>
+                onChange={(event) => {
+                  const minimumWeight = Math.max(0.1, Math.min(cardSettings.maximumWeight, event.target.valueAsNumber || 0.1));
                   onUpdateCardSettings({
                     ...cardSettings,
-                    minimumWeight: parseFloat(e.target.value) || 1.0,
-                  })
-                }
+                    minimumWeight,
+                    defaultWeight: Math.max(minimumWeight, cardSettings.defaultWeight),
+                  });
+                }}
                 className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -212,12 +198,15 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
                 step="0.5"
                 min={cardSettings.minimumWeight}
                 value={cardSettings.maximumWeight}
-                onChange={(e) =>
+                onChange={(event) => {
+                  const maximumWeight = Math.max(cardSettings.minimumWeight, event.target.valueAsNumber || cardSettings.minimumWeight);
                   onUpdateCardSettings({
                     ...cardSettings,
-                    maximumWeight: parseFloat(e.target.value) || 30.0,
-                  })
-                }
+                    maximumWeight,
+                    defaultWeight: Math.min(maximumWeight, cardSettings.defaultWeight),
+                    decayWeight: Math.min(maximumWeight, cardSettings.decayWeight),
+                  });
+                }}
                 className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -229,7 +218,7 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
               <div>
                 <h4 className="text-xs font-semibold text-slate-200">Card weight decay amount</h4>
                 <p className="text-[11px] text-slate-400">
-                  How much every card's weight increases by when the duration elapses.
+                  How much every card’s weight increases by when the duration elapses.
                 </p>
               </div>
               <input
@@ -240,7 +229,8 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
                 onChange={(e) =>
                   onUpdateCardSettings({
                     ...cardSettings,
-                    decayWeight: parseFloat(e.target.value) || 0,
+                    decayWeight: Math.max(0, Math.min(cardSettings.maximumWeight, e.target.valueAsNumber || 0)),
+                    lastDecayTime: null,
                   })
                 }
                 className="w-24 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-right font-mono text-xs text-amber-300 focus:outline-none focus:border-amber-500"
@@ -260,30 +250,20 @@ export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
             </div>
           </div>
 
-          {/* Decay Duration Select */}
-          <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg p-3">
             <div>
-              <h4 className="text-xs font-semibold text-slate-200">Card weight decay duration</h4>
-              <p className="text-[11px] text-slate-400">Every card weight decays by decay weight each time this duration elapses</p>
+              <h4 className="text-xs font-semibold text-slate-200">Card weight decay interval</h4>
+              <p className="text-[11px] text-slate-400">Set all three values to zero to disable decay.</p>
             </div>
-            <select
-              value={cardSettings.decayDurationHours === null ? '0' : cardSettings.decayDurationHours.toString()}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                onUpdateCardSettings({
-                  ...cardSettings,
-                  decayDurationHours: val === 0 ? null : val,
-                });
-              }}
-              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
-            >
-              <option value="0">Disabled</option>
-              <option value="1">Every 1 Hour</option>
-              <option value="12">Every 12 Hours</option>
-              <option value="24">Every 24 Hours (1 Day)</option>
-              <option value="48">Every 48 Hours (2 Days)</option>
-              <option value="168">Every 7 Days (1 Week)</option>
-            </select>
+            <DurationInput
+              label="Card weight decay interval"
+              minutes={Math.round((cardSettings.decayDurationHours ?? 0) * 60)}
+              onChange={(minutes) => onUpdateCardSettings({
+                ...cardSettings,
+                decayDurationHours: minutes ? minutes / 60 : null,
+                lastDecayTime: null,
+              })}
+            />
           </div>
         </div>
       </div>

@@ -5,13 +5,17 @@ import { NodeData } from '../types/flashcard';
 import { useSettings } from './SettingsContext';
 import { useNavigation } from './NavigationContext';
 import { useNodes } from '../hooks/useNodes';
+import { useLibraryBackups } from '../hooks/useLibraryBackups';
 import { getAllCardsInDeck, resetToSampleNodes } from '../utils/storage';
 import { applyWeightDecay } from '../utils/spacedRepetition';
-import { exportToWinUIJson, importFromWinUIJson, calculateJsonHash } from '../utils/winuiJsonConverter';
-import { saveStoredLocalMetadata } from '../utils/googleDriveSync';
+import { exportToWinUIJson, importFromWinUIJson, calculateJsonHash, downloadLibraryJson } from '../utils/winuiJsonConverter';
+import { saveStoredLocalMetadata, type WinUISyncMetadata } from '../utils/googleDriveSync';
+
+type ImportMode = 'auto' | 'divider' | 'contents';
 
 export interface LibraryContextValue {
   nodes: NodeData[];
+  backups: ReturnType<typeof useLibraryBackups>;
   isLoading: boolean;
   selectedNodeId: string | null;
   selectedNode: NodeData | null;
@@ -24,6 +28,7 @@ export interface LibraryContextValue {
   setSelectedNodeId: (id: string | null) => void;
   setAddCardParentId: (id: string | null) => void;
   setRevisionDividerId: (id: string | null) => void;
+  restoreSyncedNodes: (newNodes: NodeData[], metadata: WinUISyncMetadata, expectedNodes: NodeData[]) => Promise<boolean>;
   handleUpdateNodes: (newNodes: NodeData[]) => Promise<void>;
   handleSelectNode: (node: NodeData) => void;
   handleTriggerAddCard: (parentId: string | null) => void;
@@ -33,12 +38,13 @@ export interface LibraryContextValue {
   handleSaveCardEdit: (front: string, back: string) => void;
   handleRenameNode: (node: NodeData, newName: string) => void;
   handleDeleteNode: (nodeId: string) => void;
-  handleResetWeights: (nodeId: string, recursive?: boolean) => void;
+  handleResetWeights: (nodeId: string | null, recursive?: boolean) => void;
+  handleToggleProgress: (nodeId: string) => void;
   handleExportAll: (dividerId?: string) => void;
-  handleImportAll: (e: React.ChangeEvent<HTMLInputElement>, targetParentId?: string | null) => void;
+  handleImportAll: (e: React.ChangeEvent<HTMLInputElement>, targetParentId?: string | null, mode?: ImportMode) => void;
   handleResetAll: () => Promise<void>;
   handleMoveNode: (draggedNodeId: string, targetNodeId: string | null, dropPosition?: 'before' | 'after' | 'into') => void;
-  handleSortNodes: (recursive: boolean) => void;
+  handleSortNodes: (recursive: boolean, parentId?: string | null) => void;
   registerSyncListener: (listener: (nodes: NodeData[]) => void) => () => void;
 }
 
@@ -63,6 +69,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   } = useNavigation();
 
   const { nodes, isLoading, saveNodes, setNodes } = useNodes();
+  const backups = useLibraryBackups(nodes, isLoading);
+  const latestNodes = useRef(nodes);
+  useEffect(() => { latestNodes.current = nodes; }, [nodes]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [addCardParentId, setAddCardParentId] = useState<string | null>(null);
   const [revisionDividerId, setRevisionDividerId] = useState<string | null>(null);
@@ -79,12 +88,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   // Central Node Mutation Handler
   const handleUpdateNodes = useCallback(
     async (newNodes: NodeData[]) => {
+      latestNodes.current = newNodes;
       await saveNodes(newNodes);
+      if (latestNodes.current !== newNodes) return;
 
       // Save updated local SyncMetadata with current timestamp for smart sync comparison
       try {
         const jsonStr = exportToWinUIJson(newNodes, null, true);
         const hash = await calculateJsonHash(jsonStr);
+        if (latestNodes.current !== newNodes) return;
         saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
       } catch (e) {
         console.error('Failed to compute JSON hash:', e);
@@ -102,17 +114,43 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     [saveNodes]
   );
 
-  // Card Weight Decay Background Engine
-  useEffect(() => {
-    if (!cardSettings.decayDurationHours || cardSettings.decayWeight <= 0 || nodes.length === 0) return;
+  const restoreSyncedNodes = useCallback(async (
+    newNodes: NodeData[],
+    metadata: WinUISyncMetadata,
+    expectedNodes: NodeData[]
+  ) => {
+    if (latestNodes.current !== expectedNodes) return false;
+    latestNodes.current = newNodes;
+    await saveNodes(newNodes);
+    if (latestNodes.current !== newNodes) return false;
+    saveStoredLocalMetadata(metadata);
+    return true;
+  }, [saveNodes]);
 
-    const decayResult = applyWeightDecay(nodes, cardSettings);
-    if (decayResult) {
-      handleUpdateNodes(decayResult.updatedNodes);
-      const updatedSettings = { ...cardSettings, lastDecayTime: decayResult.newLastDecayTime };
-      handleUpdateCardSettings(updatedSettings);
+  useEffect(() => {
+    const { decayDurationHours, decayWeight, lastDecayTime } = cardSettings;
+    if (!decayDurationHours || decayWeight <= 0 || isLoading) return;
+    if (!lastDecayTime || !Number.isFinite(Date.parse(lastDecayTime))) {
+      handleUpdateCardSettings({ ...cardSettings, lastDecayTime: new Date().toISOString() });
+      return;
     }
-  }, [nodes, cardSettings, handleUpdateNodes, handleUpdateCardSettings]);
+
+    const applyDecay = () => {
+      const result = applyWeightDecay(latestNodes.current, cardSettings);
+      if (!result) return;
+      void handleUpdateNodes(result.updatedNodes);
+      handleUpdateCardSettings({ ...cardSettings, lastDecayTime: result.newLastDecayTime });
+    };
+    const due = Date.parse(lastDecayTime) + decayDurationHours * 3_600_000;
+    let timer: number;
+    const schedule = () => {
+      const remaining = due - Date.now();
+      if (remaining <= 0) applyDecay();
+      else timer = window.setTimeout(schedule, Math.min(remaining, 2_147_483_647));
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [isLoading, cardSettings, handleUpdateNodes, handleUpdateCardSettings]);
 
   // Derived state
   const selectedNode = useMemo(() => {
@@ -162,7 +200,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   // Save new card
   const handleSaveNewCard = useCallback(
     (front: string, back: string) => {
-      const newId = `node-card-${Date.now()}`;
+      const newId = crypto.randomUUID();
       const targetParent =
         addCardParentId !== undefined
           ? addCardParentId
@@ -178,7 +216,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         card: {
-          id: `card-${Date.now()}`,
+          id: crypto.randomUUID(),
           nodeId: newId,
           front,
           back,
@@ -189,12 +227,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         },
       };
 
-      handleUpdateNodes([...nodes, newCardNode]);
+      handleUpdateNodes([...latestNodes.current, newCardNode]);
       setSelectedNodeId(newId);
-      setRightViewMode('CardView');
       setMobileView('card');
     },
-    [addCardParentId, selectedNode, cardSettings.defaultWeight, handleUpdateNodes, nodes, setRightViewMode, setMobileView]
+    [addCardParentId, selectedNode, cardSettings.defaultWeight, handleUpdateNodes, setMobileView]
   );
 
   const handleAddDivider = useCallback(
@@ -260,7 +297,12 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const handleRenameNode = useCallback(
     (node: NodeData, newName: string) => {
-      const updated = nodes.map((n) => (n.id === node.id ? { ...n, name: newName } : n));
+      const updated = nodes.map((n) => {
+        if (n.id !== node.id) return n;
+        return n.card
+          ? { ...n, name: newName.slice(0, 35).replace(/[#*`]/g, '') || n.name, card: { ...n.card, front: newName } }
+          : { ...n, name: newName };
+      });
       handleUpdateNodes(updated);
     },
     [nodes, handleUpdateNodes]
@@ -285,71 +327,66 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     [nodes, handleUpdateNodes, selectedNodeId, setMobileView]
   );
 
-  const handleResetWeights = useCallback(
-    (nodeId: string, recursive: boolean = true) => {
-      const idsToReset = new Set<string>();
-      const targetNode = nodes.find((n) => n.id === nodeId);
-      if (!targetNode) return;
-
-      if (targetNode.type === 'card') {
-        idsToReset.add(nodeId);
-      } else if (targetNode.type === 'divider') {
-        const collect = (id: string) => {
-          nodes.filter((n) => n.parentId === id).forEach((c) => {
-            if (c.type === 'card') idsToReset.add(c.id);
-            else if (c.type === 'divider' && recursive) collect(c.id);
-          });
-        };
-        collect(nodeId);
+  const handleResetWeights = useCallback((nodeId: string | null, recursive = true) => {
+    const idsToReset = new Set<string>();
+    const collect = (parentId: string | null) => {
+      for (const child of nodes.filter((node) => node.parentId === parentId)) {
+        if (child.card) idsToReset.add(child.id);
+        else if (recursive) collect(child.id);
       }
+    };
 
-      const updated = nodes.map((n) => {
-        if (idsToReset.has(n.id) && n.card) {
-          return {
-            ...n,
-            card: { ...n.card, weight: cardSettings.defaultWeight },
-          };
-        }
-        return n;
-      });
-      handleUpdateNodes(updated);
-    },
-    [nodes, cardSettings.defaultWeight, handleUpdateNodes]
-  );
+    if (nodeId && nodes.find((node) => node.id === nodeId)?.card) idsToReset.add(nodeId);
+    else collect(nodeId);
+
+    const hideUntil = new Date().toISOString();
+    void handleUpdateNodes(nodes.map((node) =>
+      idsToReset.has(node.id) && node.card
+        ? { ...node, card: { ...node.card, weight: cardSettings.defaultWeight, hideUntil } }
+        : node
+    ));
+  }, [nodes, cardSettings.defaultWeight, handleUpdateNodes]);
+
+  const handleToggleProgress = useCallback((nodeId: string) => {
+    void handleUpdateNodes(nodes.map((node) => node.id === nodeId && node.divider
+      ? { ...node, divider: { ...node.divider, isProgressShown: !node.divider.isProgressShown } }
+      : node
+    ));
+  }, [nodes, handleUpdateNodes]);
 
   const handleExportAll = useCallback(
     (dividerId?: string) => {
-      const jsonStr = exportToWinUIJson(nodes, typeof dividerId === 'string' ? dividerId : null);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `flashcards_export_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const json = exportToWinUIJson(nodes, typeof dividerId === 'string' ? dividerId : null);
+      const name = nodes.find((node) => node.id === dividerId)?.name;
+      const filename = name
+        ? name.replace(/[<>:"/\\|?*]/g, '_') + '.json'
+        : `flashcards_backup-${new Date().toISOString().slice(0, 10)}.json`;
+      downloadLibraryJson(json, filename);
     },
     [nodes]
   );
 
-  const handleImportAll = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>, targetParentId: string | null = null) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const imported = JSON.parse(evt.target?.result as string);
-          const updated = importFromWinUIJson(imported, nodes, targetParentId);
-          handleUpdateNodes(updated);
-          alert('WinUI flashcards imported successfully!');
-        } catch (err) {
-          alert('Failed to parse WinUI JSON file.');
-        }
-      };
-      reader.readAsText(file);
-    },
-    [nodes, handleUpdateNodes]
-  );
+  const handleImportAll = useCallback(async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    targetParentId: string | null = null,
+    mode: ImportMode = 'auto'
+  ) => {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    event.currentTarget.value = '';
+    try {
+      const imported: unknown = JSON.parse(await file.text());
+      const current = latestNodes.current;
+      if (targetParentId && !current.some((node) => node.id === targetParentId && node.type === 'divider')) {
+        throw new Error('Target divider no longer exists');
+      }
+      const updated = importFromWinUIJson(imported, current, targetParentId, false, mode);
+      await handleUpdateNodes(updated);
+      alert('WinUI flashcards imported successfully!');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to import WinUI JSON.');
+    }
+  }, [handleUpdateNodes]);
 
   const handleResetAll = useCallback(async () => {
     if (confirm('Reset to factory sample flashcards?')) {
@@ -389,7 +426,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const targetParentId = targetNode ? targetNode.parentId : null;
 
       // Prevent dropping into own descendant
-      if (targetParentId && isDescendant(targetParentId, draggedNodeId)) return;
+      if (targetParentId && (targetParentId === draggedNodeId || isDescendant(targetParentId, draggedNodeId))) return;
 
       // Build the new flat node list:
       // 1. Remove dragged node from its current position
@@ -421,7 +458,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const handleSortNodes = useCallback(
-    (recursive: boolean) => {
+    (recursive: boolean, parentId: string | null = null) => {
       const sortLevel = (list: NodeData[], parentId: string | null): NodeData[] => {
         const children = list.filter((n) => n.parentId === parentId);
         const others = list.filter((n) => n.parentId !== parentId);
@@ -430,7 +467,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           if (a.type !== b.type) {
             return a.type === 'divider' ? -1 : 1;
           }
-          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+          return (a.card?.front ?? a.name).localeCompare(b.card?.front ?? b.name, undefined, { sensitivity: 'base', numeric: true });
         });
 
         let nextList = [...others, ...children];
@@ -446,7 +483,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         return nextList;
       };
 
-      const sorted = sortLevel(nodes, null);
+      const sorted = sortLevel(nodes, parentId);
       handleUpdateNodes(sorted);
     },
     [nodes, handleUpdateNodes]
@@ -456,6 +493,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     <LibraryContext.Provider
       value={{
         nodes,
+        backups,
         isLoading,
         selectedNodeId,
         selectedNode,
@@ -469,6 +507,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         setAddCardParentId,
         setRevisionDividerId,
         handleUpdateNodes,
+        restoreSyncedNodes,
         handleSelectNode,
         handleTriggerAddCard,
         handleSaveNewCard,
@@ -478,6 +517,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         handleRenameNode,
         handleDeleteNode,
         handleResetWeights,
+        handleToggleProgress,
         handleExportAll,
         handleImportAll,
         handleResetAll,

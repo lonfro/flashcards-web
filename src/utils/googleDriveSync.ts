@@ -46,7 +46,7 @@ export function getStoredAccessToken(): string | null {
       return null;
     }
     return token;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -86,7 +86,7 @@ export function getStoredLocalMetadata(): WinUISyncMetadata | null {
   try {
     const raw = localStorage.getItem(STORAGE_LOCAL_METADATA_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -130,8 +130,8 @@ export async function refreshAccessTokenViaServer(): Promise<{
       return { success: true, accessToken: data.accessToken, expiresIn };
     }
     return { success: false, error: data.error || 'no_access_token' };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'server_refresh_failed' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'server_refresh_failed' };
   }
 }
 
@@ -151,7 +151,7 @@ export function loginViaServerlessPopup(
   const top = window.screenY + (window.outerHeight - height) / 2;
 
   const loginUrl = `/api/auth/google/login${clientId ? `?client_id=${encodeURIComponent(clientId)}` : ''}`;
-  const popup = window.open(
+  window.open(
     loginUrl,
     'google_oauth_serverless_popup',
     `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no`
@@ -165,7 +165,7 @@ export function loginViaServerlessPopup(
       if (event.data.email) {
         try {
           localStorage.setItem(STORAGE_USER_EMAIL_KEY, event.data.email);
-        } catch (e) {}
+        } catch {}
       }
       onSuccess?.(event.data.accessToken);
     } else if (event.data?.type === 'GOOGLE_AUTH_ERROR') {
@@ -183,15 +183,14 @@ export function loginViaServerlessPopup(
 export function requestGoogleDriveToken(
   clientId?: string,
   onSuccess?: (accessToken: string) => void,
-  onError?: (err: string) => void,
-  _prompt?: string
+  onError?: (err: string) => void
 ): void {
   if (typeof window === 'undefined') return;
 
   if (clientId) {
     try {
       localStorage.setItem(STORAGE_CLIENT_ID_KEY, clientId);
-    } catch (e) {}
+    } catch {}
   }
 
   loginViaServerlessPopup(clientId, onSuccess, onError);
@@ -211,7 +210,7 @@ export async function requestSilentGoogleDriveToken(
       onSuccess(serverRefresh.accessToken);
       return;
     }
-  } catch (e) {}
+  } catch {}
 
   onError('Silent refresh unavailable');
 }
@@ -242,8 +241,8 @@ async function findFileInAppDataFolder(
     const searchData = await searchRes.json();
     const file = searchData.files && searchData.files.length > 0 ? searchData.files[0] : undefined;
     return { success: true, file };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Search network error' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Search network error' };
   }
 }
 
@@ -326,8 +325,8 @@ async function uploadSingleFileToDrive(
 
       return { success: true };
     }
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Upload network error' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Upload network error' };
   }
 }
 
@@ -341,8 +340,8 @@ export async function uploadStatsToDrive(
   try {
     const jsonStr = JSON.stringify(logs, null, 2);
     return await uploadSingleFileToDrive(accessToken, STATS_FILE_NAME, jsonStr);
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to upload stats' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Failed to upload stats' };
   }
 }
 
@@ -376,13 +375,13 @@ export async function downloadStatsFromDrive(
     let parsed: StudyLogEntry[] = [];
     try {
       parsed = JSON.parse(jsonText);
-    } catch (e) {
+    } catch {
       parsed = [];
     }
 
     return { success: true, logs: Array.isArray(parsed) ? parsed : [] };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to download stats' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Failed to download stats' };
   }
 }
 
@@ -448,6 +447,7 @@ export async function uploadToGoogleDrive(
   nodes: NodeData[]
 ): Promise<{ success: boolean; isAuthError?: boolean; error?: string }> {
   try {
+    const previousMetadata = localStorage.getItem(STORAGE_LOCAL_METADATA_KEY);
     const jsonContent = exportToWinUIJson(nodes, null, true);
     const hash = await calculateJsonHash(jsonContent);
     const modifiedAt = new Date().toISOString();
@@ -462,10 +462,12 @@ export async function uploadToGoogleDrive(
     const metaUpload = await uploadSingleFileToDrive(accessToken, METADATA_FILE_NAME, JSON.stringify(metadata, null, 2));
     if (!metaUpload.success) return metaUpload;
 
-    saveStoredLocalMetadata(metadata);
+    if (localStorage.getItem(STORAGE_LOCAL_METADATA_KEY) === previousMetadata) {
+      saveStoredLocalMetadata(metadata);
+    }
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to upload to Google Drive' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Failed to upload to Google Drive' };
   }
 }
 
@@ -501,8 +503,8 @@ export async function getRemoteMetadataFromDrive(
     const metaText = await downloadRes.text();
     const metadata: WinUISyncMetadata = JSON.parse(metaText);
     return { success: true, metadata };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to get remote metadata' };
+  } catch (err) {
+    return { success: false, error: err instanceof Error && err.message ? err.message : 'Failed to get remote metadata' };
   }
 }
 
@@ -513,13 +515,13 @@ export async function downloadFromGoogleDrive(
   accessToken: string,
   currentNodes: NodeData[],
   overwriteLocal: boolean = true
-): Promise<{ success: boolean; nodes?: NodeData[]; isAuthError?: boolean; error?: string }> {
+): Promise<{ success: boolean; nodes?: NodeData[]; hash?: string; notFound?: boolean; isAuthError?: boolean; error?: string }> {
   try {
     const findRes = await findFileInAppDataFolder(accessToken, LIBRARY_FILE_NAME);
     if (!findRes.success) return findRes;
 
     if (!findRes.file) {
-      return { success: false, error: 'No library.json found in Google Drive appDataFolder' };
+      return { success: false, notFound: true, error: 'No library.json found in Google Drive appDataFolder' };
     }
 
     const downloadRes = await fetch(
@@ -538,25 +540,13 @@ export async function downloadFromGoogleDrive(
     }
 
     const jsonText = await downloadRes.text();
-    let parsedJson: any = null;
-    try {
-      parsedJson = JSON.parse(jsonText);
-    } catch (parseErr) {
-      return { success: false, error: 'Downloaded library.json is not valid JSON' };
-    }
-
-    const parsedNodes = importFromWinUIJson(parsedJson, currentNodes, null, overwriteLocal);
-
-    if (parsedNodes.length === 0 && jsonText.length > 50) {
-      return { success: false, error: 'Failed to extract decks from downloaded library.json' };
-    }
-
     return {
       success: true,
-      nodes: parsedNodes,
+      nodes: importFromWinUIJson(jsonText, currentNodes, null, overwriteLocal),
+      hash: await calculateJsonHash(jsonText),
     };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to download from Google Drive' };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to download from Google Drive' };
   }
 }
 
@@ -567,75 +557,48 @@ export async function downloadFromGoogleDrive(
  */
 export async function performSmartSync(
   accessToken: string,
-  localNodes: NodeData[]
+  localNodes: NodeData[],
+  canRefresh = true
 ): Promise<{
   success: boolean;
   actionTaken: 'downloaded' | 'uploaded' | 'noop';
   nodes?: NodeData[];
+  metadata?: WinUISyncMetadata;
   isAuthError?: boolean;
   error?: string;
 }> {
-  try {
-    const remoteMetaRes = await getRemoteMetadataFromDrive(accessToken);
-    if (!remoteMetaRes.success) {
-      if (remoteMetaRes.isAuthError) {
-        const refreshRes = await refreshAccessTokenViaServer();
-        if (refreshRes.success && refreshRes.accessToken) {
-          return performSmartSync(refreshRes.accessToken, localNodes);
-        }
+  const localMetadata = getStoredLocalMetadata();
+  const remoteResult = await getRemoteMetadataFromDrive(accessToken);
+  if (!remoteResult.success) {
+    if (remoteResult.isAuthError && canRefresh) {
+      const refresh = await refreshAccessTokenViaServer();
+      if (refresh.success && refresh.accessToken) {
+        return performSmartSync(refresh.accessToken, localNodes, false);
       }
-      return { success: false, actionTaken: 'noop', isAuthError: remoteMetaRes.isAuthError, error: remoteMetaRes.error };
     }
-
-    const remoteMetadata = remoteMetaRes.metadata;
-    const localMetadata = getStoredLocalMetadata();
-
-    // 1. Local metadata is null (not mutated yet / fresh session):
-    if (!localMetadata) {
-      if (remoteMetadata) {
-        const downloadRes = await downloadFromGoogleDrive(accessToken, localNodes, true);
-        if (downloadRes.success && downloadRes.nodes && downloadRes.nodes.length > 0) {
-          saveStoredLocalMetadata(remoteMetadata);
-          return { success: true, actionTaken: 'downloaded', nodes: downloadRes.nodes };
-        }
-      }
-      return { success: true, actionTaken: 'noop', nodes: localNodes };
-    }
-
-    // 2. Remote metadata doesn't exist on Google Drive yet:
-    if (!remoteMetadata) {
-      const uploadRes = await uploadToGoogleDrive(accessToken, localNodes);
-      if (uploadRes.success) {
-        return { success: true, actionTaken: 'uploaded' };
-      }
-      return { success: false, actionTaken: 'noop', error: uploadRes.error, isAuthError: uploadRes.isAuthError };
-    }
-
-    // 3. Hashes match — NO-OP!
-    if (remoteMetadata.Hash === localMetadata.Hash) {
-      return { success: true, actionTaken: 'noop', nodes: localNodes };
-    }
-
-    // 4. Remote is newer than local (remoteMetadata.ModifiedAt > localMetadata.ModifiedAt):
-    const remoteTime = new Date(remoteMetadata.ModifiedAt).getTime();
-    const localTime = new Date(localMetadata.ModifiedAt).getTime();
-
-    if (remoteTime > localTime) {
-      const downloadRes = await downloadFromGoogleDrive(accessToken, localNodes, true);
-      if (downloadRes.success && downloadRes.nodes) {
-        saveStoredLocalMetadata(remoteMetadata);
-        return { success: true, actionTaken: 'downloaded', nodes: downloadRes.nodes };
-      }
-      return { success: true, actionTaken: 'noop', nodes: localNodes };
-    }
-
-    // 5. Local is newer than remote (localTime >= remoteTime):
-    const uploadRes = await uploadToGoogleDrive(accessToken, localNodes);
-    if (uploadRes.success) {
-      return { success: true, actionTaken: 'uploaded' };
-    }
-    return { success: false, actionTaken: 'noop', error: uploadRes.error, isAuthError: uploadRes.isAuthError };
-  } catch (err: any) {
-    return { success: false, actionTaken: 'noop', error: err.message || 'Smart sync failed' };
+    return { success: false, actionTaken: 'noop', isAuthError: remoteResult.isAuthError, error: remoteResult.error };
   }
+
+  const remoteMetadata = remoteResult.metadata;
+  if (remoteMetadata && remoteMetadata.Hash === localMetadata?.Hash) {
+    return { success: true, actionTaken: 'noop' };
+  }
+
+  if (!remoteMetadata || !localMetadata ||
+      Date.parse(remoteMetadata.ModifiedAt) > Date.parse(localMetadata.ModifiedAt)) {
+    const download = await downloadFromGoogleDrive(accessToken, localNodes);
+    if (download.success && download.nodes && download.hash) {
+      const metadata = remoteMetadata ?? { Hash: download.hash, ModifiedAt: new Date(0).toISOString() };
+      return { success: true, actionTaken: 'downloaded', nodes: download.nodes, metadata };
+    }
+    if (remoteMetadata || !download.notFound) {
+      return { success: false, actionTaken: 'noop', error: download.error, isAuthError: download.isAuthError };
+    }
+    if (!localMetadata) return { success: true, actionTaken: 'noop' };
+  }
+
+  const upload = await uploadToGoogleDrive(accessToken, localNodes);
+  return upload.success
+    ? { success: true, actionTaken: 'uploaded' }
+    : { success: false, actionTaken: 'noop', error: upload.error, isAuthError: upload.isAuthError };
 }

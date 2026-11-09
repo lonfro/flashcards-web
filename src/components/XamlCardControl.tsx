@@ -36,7 +36,9 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea') return;
+      if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey ||
+          activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+      if (e.target instanceof HTMLElement && e.target.closest('button, a, [contenteditable]')) return;
 
       if (!cardNode || !cardNode.card) return;
 
@@ -90,7 +92,7 @@ export const XamlCardControl: React.FC<XamlCardControlProps> = ({
   const minW = cardSettings?.minimumWeight ?? 1.0;
   const rawWeight = typeof card.weight === 'number' ? card.weight : (cardSettings?.defaultWeight ?? 20.0);
 
-  const weightPercent = Math.min(
+  const weightPercent = maxW === minW ? 0 : Math.min(
     100,
     Math.max(0, Math.round(((maxW - rawWeight) / (maxW - minW)) * 100))
   );

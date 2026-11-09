@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
-import { Trophy, RotateCcw, ArrowRight, CheckCircle2, AlertCircle, Clock, Zap, Sparkles } from 'lucide-react';
+import { Trophy, RotateCcw, ArrowRight, CheckCircle2, AlertCircle, Clock, Sparkles } from 'lucide-react';
 import { NodeData, Difficulty } from '../types/flashcard';
 import { calculateNextReview } from '../utils/spacedRepetition';
 import { CardFlipper } from './CardFlipper';
@@ -27,7 +27,8 @@ export const StudySession: React.FC<StudySessionProps> = ({
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
   const [reviewedCount, setReviewedCount] = useState<number>(0);
   const [correctCount, setCorrectCount] = useState<number>(0);
-  const [startTime] = useState<number>(Date.now());
+  const [startTime, setStartTime] = useState(Date.now);
+  const [totalTimeSec, setTotalTimeSec] = useState(0);
   const [isFinished, setIsFinished] = useState<boolean>(false);
 
   const currentCardNode = queue[currentIndex];
@@ -72,10 +73,11 @@ export const StudySession: React.FC<StudySessionProps> = ({
       if (currentIndex + 1 < queue.length) {
         setCurrentIndex((prev) => prev + 1);
       } else {
+        setTotalTimeSec(Math.round((Date.now() - startTime) / 1000));
         setIsFinished(true);
       }
     },
-    [currentCardNode, currentIndex, queue.length, onUpdateCard]
+    [currentCardNode, currentIndex, queue.length, onUpdateCard, startTime]
   );
 
   // Keyboard shortcut listener (Space to flip, 1-4 for difficulty)
@@ -117,7 +119,6 @@ export const StudySession: React.FC<StudySessionProps> = ({
   }
 
   if (isFinished) {
-    const totalTimeSec = Math.round((Date.now() - startTime) / 1000);
     const mins = Math.floor(totalTimeSec / 60);
     const secs = totalTimeSec % 60;
     const accuracy = reviewedCount > 0 ? Math.round((correctCount / reviewedCount) * 100) : 100;
@@ -169,6 +170,7 @@ export const StudySession: React.FC<StudySessionProps> = ({
               setIsFlipped(false);
               setReviewedCount(0);
               setCorrectCount(0);
+              setStartTime(Date.now());
               setIsFinished(false);
             }}
             className="flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl transition-all flex items-center justify-center space-x-2 border border-slate-700"

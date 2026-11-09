@@ -15,9 +15,7 @@ import {
   downloadFromGoogleDrive,
   getRemoteMetadataFromDrive,
   performSmartSync,
-  saveStoredLocalMetadata,
 } from '../utils/googleDriveSync';
-import { exportToWinUIJson, calculateJsonHash } from '../utils/winuiJsonConverter';
 
 export interface SyncContextValue {
   accessToken: string | null;
@@ -44,7 +42,7 @@ export function useSync(): SyncContextValue {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const { nodes, isLoading, setNodes, setSelectedNodeId, selectedNodeId, registerSyncListener, handleUpdateNodes } = useLibrary();
+  const { nodes, isLoading, setSelectedNodeId, selectedNodeId, registerSyncListener, restoreSyncedNodes } = useLibrary();
   const { autoRefreshEnabled, autoRefreshInterval } = useSettings();
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -54,90 +52,88 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef<boolean>(false);
 
-  // Load last sync time on mount
-  useEffect(() => {
-    try {
-      const savedSync = localStorage.getItem(STORAGE_LAST_SYNC_KEY);
-      if (savedSync) setLastSyncTime(savedSync);
-    } catch (e) {
-      console.error('Failed to load last sync time:', e);
-    }
-  }, []);
-
-  // Startup: restore persistent Google Drive session once library has loaded
+  // Restore the browser session after the library has loaded.
   useEffect(() => {
     if (isLoading || hasInitializedRef.current) return;
-    hasInitializedRef.current = true;
 
-    const token = getStoredAccessToken();
+    const frame = window.requestAnimationFrame(() => {
+      hasInitializedRef.current = true;
+      try {
+        const savedSync = localStorage.getItem(STORAGE_LAST_SYNC_KEY);
+        if (savedSync) setLastSyncTime(savedSync);
+      } catch (error) {
+        console.error('Failed to load last sync time:', error);
+      }
 
-    if (token) {
-      setAccessToken(token);
-      setSyncState('syncing');
+      const token = getStoredAccessToken();
 
-      performSmartSync(token, nodes).then((res) => {
-        if (res.success) {
-          if (res.nodes) {
-            handleUpdateNodes(res.nodes);
-            const firstCard = res.nodes.find((n) => n.type === 'card');
-            setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
-          }
-          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setLastSyncTime(timeStr);
-          try {
-            localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-          } catch (e) {}
-          setSyncState('synced');
-        } else if (res.isAuthError) {
-          // Token expired mid-session — try silent server refresh cookie
-          refreshAccessTokenViaServer().then((refreshRes) => {
-            if (refreshRes.success && refreshRes.accessToken) {
-              setAccessToken(refreshRes.accessToken);
-              performSmartSync(refreshRes.accessToken, nodes).then((sRes) => {
-                if (sRes.success && sRes.nodes) {
-                  handleUpdateNodes(sRes.nodes);
-                }
-                setSyncState('synced');
-              });
-            } else {
-              clearStoredToken();
-              setAccessToken(null);
-              setSyncState('unauthenticated');
+      if (token) {
+        setAccessToken(token);
+        setSyncState('syncing');
+
+        performSmartSync(token, nodes).then(async (res) => {
+          if (res.success) {
+            if (res.nodes && res.metadata && await restoreSyncedNodes(res.nodes, res.metadata, nodes)) {
+              const firstCard = res.nodes.find((n) => n.type === 'card');
+              setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
             }
-          });
-        } else {
-          setSyncState('unauthenticated');
-        }
-      });
-    } else {
-      // No localStorage token — try server HttpOnly refresh_token cookie for persistent session
-      setSyncState('syncing');
-      refreshAccessTokenViaServer().then((refreshRes) => {
-        if (refreshRes.success && refreshRes.accessToken) {
-          setAccessToken(refreshRes.accessToken);
-          performSmartSync(refreshRes.accessToken, nodes).then((res) => {
-            if (res.success) {
-              if (res.nodes) {
-                handleUpdateNodes(res.nodes);
-                const firstCard = res.nodes.find((n) => n.type === 'card');
-                setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setLastSyncTime(timeStr);
+            try {
+              localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
+            } catch {}
+            setSyncState('synced');
+          } else if (res.isAuthError) {
+            // Token expired mid-session — try silent server refresh cookie
+            refreshAccessTokenViaServer().then((refreshRes) => {
+              if (refreshRes.success && refreshRes.accessToken) {
+                setAccessToken(refreshRes.accessToken);
+                performSmartSync(refreshRes.accessToken, nodes).then(async (sRes) => {
+                  if (sRes.success && sRes.nodes && sRes.metadata) {
+                    await restoreSyncedNodes(sRes.nodes, sRes.metadata, nodes);
+                  }
+                  setSyncState('synced');
+                });
+              } else {
+                clearStoredToken();
+                setAccessToken(null);
+                setSyncState('unauthenticated');
               }
-              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              setLastSyncTime(timeStr);
-              try {
-                localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-              } catch (e) {}
-              setSyncState('synced');
-            } else {
-              setSyncState('synced');
-            }
-          });
-        } else {
-          setSyncState('unauthenticated');
-        }
-      });
-    }
-  }, [isLoading, nodes, handleUpdateNodes, setSelectedNodeId]);
+            });
+          } else {
+            setSyncState('unauthenticated');
+          }
+        });
+      } else {
+        // No localStorage token — try server HttpOnly refresh_token cookie for persistent session
+        setSyncState('syncing');
+        refreshAccessTokenViaServer().then((refreshRes) => {
+          if (refreshRes.success && refreshRes.accessToken) {
+            setAccessToken(refreshRes.accessToken);
+            performSmartSync(refreshRes.accessToken, nodes).then(async (res) => {
+              if (res.success) {
+                if (res.nodes && res.metadata && await restoreSyncedNodes(res.nodes, res.metadata, nodes)) {
+                  const firstCard = res.nodes.find((n) => n.type === 'card');
+                  setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
+                }
+                const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setLastSyncTime(timeStr);
+                try {
+                  localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
+                } catch {}
+                setSyncState('synced');
+              } else {
+                setSyncState('synced');
+              }
+            });
+          } else {
+            setSyncState('unauthenticated');
+          }
+        });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isLoading, nodes, restoreSyncedNodes, setSelectedNodeId]);
 
   // Debounced auto-sync when nodes change
   useEffect(() => {
@@ -150,16 +146,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
 
       syncTimeoutRef.current = setTimeout(() => {
-        performSmartSync(accessToken, updatedNodes).then((res) => {
+        performSmartSync(accessToken, updatedNodes).then(async (res) => {
           if (res.success) {
-            if (res.nodes) {
-              setNodes(res.nodes);
+            if (res.nodes && res.metadata) {
+              await restoreSyncedNodes(res.nodes, res.metadata, updatedNodes);
             }
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             setLastSyncTime(timeStr);
             try {
               localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-            } catch (e) {}
+            } catch {}
             setSyncState('synced');
           } else if (res.isAuthError) {
             setAccessToken(null);
@@ -173,8 +169,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unregister();
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     };
-  }, [accessToken, registerSyncListener, setNodes]);
+  }, [accessToken, registerSyncListener, restoreSyncedNodes]);
 
   // Background Auto-Refresh Polling
   useEffect(() => {
@@ -182,16 +179,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     const intervalMs = autoRefreshInterval * 1000;
     const intervalId = setInterval(() => {
-      performSmartSync(accessToken, nodes).then((res) => {
+      performSmartSync(accessToken, nodes).then(async (res) => {
         if (res.success) {
-          if (res.nodes) {
-            handleUpdateNodes(res.nodes);
+          if (res.nodes && res.metadata) {
+            await restoreSyncedNodes(res.nodes, res.metadata, nodes);
           }
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           setLastSyncTime(timeStr);
           try {
             localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-          } catch (e) {}
+          } catch {}
           setSyncState('synced');
         } else if (res.isAuthError) {
           setAccessToken(null);
@@ -201,7 +198,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }, intervalMs);
 
     return () => clearInterval(intervalId);
-  }, [autoRefreshEnabled, autoRefreshInterval, accessToken, nodes, handleUpdateNodes]);
+  }, [autoRefreshEnabled, autoRefreshInterval, accessToken, nodes, restoreSyncedNodes]);
 
   // Connect to Google Drive (OAuth)
   const handleConnectDrive = useCallback(
@@ -213,43 +210,29 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           setAccessToken(token);
           setSyncState('syncing');
 
-          // On first sign-in: auto-restore from Google Drive
-          downloadFromGoogleDrive(token, nodes, true).then((dlRes) => {
-            if (dlRes.success && dlRes.nodes && dlRes.nodes.length > 0) {
-              handleUpdateNodes(dlRes.nodes);
-              const firstCard = dlRes.nodes.find((n) => n.type === 'card');
-              setSelectedNodeId(firstCard ? firstCard.id : (dlRes.nodes[0]?.id || null));
-
-              getRemoteMetadataFromDrive(token).then((metaRes) => {
-                if (metaRes.metadata) {
-                  saveStoredLocalMetadata(metaRes.metadata);
-                }
-              });
-
-              const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              setLastSyncTime(timeStr);
-              try {
-                localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-              } catch (e) {}
-              setSyncState('synced');
+          downloadFromGoogleDrive(token, nodes).then(async (result) => {
+            if (result.success && result.nodes && result.hash) {
+              const remote = await getRemoteMetadataFromDrive(token);
+              const metadata = remote.metadata ?? { Hash: result.hash, ModifiedAt: new Date(0).toISOString() };
+              if (await restoreSyncedNodes(result.nodes, metadata, nodes)) {
+                const firstCard = result.nodes.find((node) => node.type === 'card');
+                setSelectedNodeId(firstCard?.id ?? result.nodes[0]?.id ?? null);
+              }
+            } else if (result.notFound) {
+              const upload = await uploadToGoogleDrive(token, nodes);
+              if (!upload.success) {
+                setSyncState('error');
+                return;
+              }
             } else {
-              // Upload current library if no library on Drive yet
-              uploadToGoogleDrive(token, nodes).then((upRes) => {
-                if (upRes.success) {
-                  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  setLastSyncTime(timeStr);
-                  try {
-                    localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-                  } catch (e) {}
-                  setSyncState('synced');
-                } else if (upRes.isAuthError) {
-                  setAccessToken(null);
-                  setSyncState('unauthenticated');
-                } else {
-                  setSyncState('error');
-                }
-              });
+              setSyncState('error');
+              return;
             }
+
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setLastSyncTime(time);
+            localStorage.setItem(STORAGE_LAST_SYNC_KEY, time);
+            setSyncState('synced');
           });
         },
         () => {
@@ -257,7 +240,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         }
       );
     },
-    [nodes, handleUpdateNodes, setSelectedNodeId]
+    [nodes, restoreSyncedNodes, setSelectedNodeId]
   );
 
   const handleDisconnectDrive = useCallback(() => {
@@ -275,7 +258,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setLastSyncTime(timeStr);
         try {
           localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-        } catch (e) {}
+        } catch {}
         setSyncState('synced');
       } else if (res.isAuthError) {
         setAccessToken(null);
@@ -289,22 +272,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const handleManualDownload = useCallback(() => {
     if (!accessToken) return;
     setSyncState('syncing');
-    downloadFromGoogleDrive(accessToken, nodes, true).then((res) => {
-      if (res.success && res.nodes) {
-        handleUpdateNodes(res.nodes);
+    downloadFromGoogleDrive(accessToken, nodes, true).then(async (res) => {
+      if (res.success && res.nodes && res.hash) {
+        const remote = await getRemoteMetadataFromDrive(accessToken);
+        const metadata = remote.metadata ?? { Hash: res.hash, ModifiedAt: new Date(0).toISOString() };
+        if (!await restoreSyncedNodes(res.nodes, metadata, nodes)) {
+          setSyncState('idle');
+          return;
+        }
         if (!selectedNodeId || !res.nodes.some((n) => n.id === selectedNodeId)) {
           const firstCard = res.nodes.find((n) => n.type === 'card');
           setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
         }
-        const jsonStr = exportToWinUIJson(res.nodes, null, true);
-        calculateJsonHash(jsonStr).then((hash) => {
-          saveStoredLocalMetadata({ Hash: hash, ModifiedAt: new Date().toISOString() });
-        });
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLastSyncTime(timeStr);
         try {
           localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-        } catch (e) {}
+        } catch {}
         setSyncState('synced');
       } else if (res.isAuthError) {
         setAccessToken(null);
@@ -313,16 +297,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setSyncState('error');
       }
     });
-  }, [accessToken, nodes, handleUpdateNodes, selectedNodeId, setSelectedNodeId]);
+  }, [accessToken, nodes, restoreSyncedNodes, selectedNodeId, setSelectedNodeId]);
 
   const handleFullManualSync = useCallback(() => {
     if (!accessToken) return;
     setSyncState('syncing');
 
-    performSmartSync(accessToken, nodes).then((res) => {
+    performSmartSync(accessToken, nodes).then(async (res) => {
       if (res.success) {
-        if (res.nodes) {
-          handleUpdateNodes(res.nodes);
+        if (res.nodes && res.metadata && await restoreSyncedNodes(res.nodes, res.metadata, nodes)) {
           if (!selectedNodeId || !res.nodes.some((n) => n.id === selectedNodeId)) {
             const firstCard = res.nodes.find((n) => n.type === 'card');
             setSelectedNodeId(firstCard ? firstCard.id : (res.nodes[0]?.id || null));
@@ -332,7 +315,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setLastSyncTime(timeStr);
         try {
           localStorage.setItem(STORAGE_LAST_SYNC_KEY, timeStr);
-        } catch (e) {}
+        } catch {}
         setSyncState('synced');
       } else if (res.isAuthError) {
         setAccessToken(null);
@@ -341,7 +324,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setSyncState('error');
       }
     });
-  }, [accessToken, nodes, handleUpdateNodes, selectedNodeId, setSelectedNodeId]);
+  }, [accessToken, nodes, restoreSyncedNodes, selectedNodeId, setSelectedNodeId]);
 
   return (
     <SyncContext.Provider

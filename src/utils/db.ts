@@ -3,7 +3,7 @@ import { NodeData } from '../types/flashcard';
 import { StudyLogEntry } from '../types/stats';
 
 const DB_NAME = 'flashcards_web';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface FlashcardsDB {
   nodes: {
@@ -14,6 +14,10 @@ export interface FlashcardsDB {
   meta: {
     key: string; // e.g. 'localHash', 'localModifiedAt'
     value: string;
+  };
+  library_backups: {
+    key: number; // Creation time in milliseconds
+    value: string; // Windows-format JSON
   };
   study_logs: {
     key: string; // StudyLogEntry.id
@@ -31,7 +35,10 @@ export function getDB(): Promise<IDBPDatabase<FlashcardsDB>> {
 
   if (!dbPromise) {
     dbPromise = openDB<FlashcardsDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('library_backups')) {
+          db.createObjectStore('library_backups');
+        }
         if (!db.objectStoreNames.contains('nodes')) {
           const store = db.createObjectStore('nodes', { keyPath: 'id' });
           store.createIndex('by-parent', 'parentId');
@@ -212,4 +219,27 @@ export async function idbClearStudyLogs(): Promise<void> {
   } catch (error) {
     console.error('Failed to clear study logs from IndexedDB:', error);
   }
+}
+
+
+export async function idbSaveLibraryBackup(
+  json: string,
+  limit: number,
+  scheduled?: { intervalMs: number; enabledAt: number }
+): Promise<number[]> {
+  const db = await getDB();
+  const tx = db.transaction('library_backups', 'readwrite');
+  const keys = await tx.store.getAllKeys();
+  const times = keys.filter((key): key is number => typeof key === 'number');
+  const now = Date.now();
+  const lastBackup = Math.max(times.at(-1) ?? 0, scheduled?.enabledAt ?? 0);
+  if (!scheduled || now - lastBackup >= scheduled.intervalMs) {
+    await tx.store.put(json, now);
+    if (times.at(-1) !== now) times.push(now);
+    for (const time of times.splice(0, Math.max(0, times.length - limit))) {
+      await tx.store.delete(time);
+    }
+  }
+  await tx.done;
+  return times;
 }

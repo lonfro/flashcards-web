@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Bold, Italic, Code, Sigma, ListCheck, Heading, Save, Layers } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -14,35 +14,35 @@ interface CardEditorModalProps {
   defaultParentId?: string | null;
 }
 
-export const CardEditorModal: React.FC<CardEditorModalProps> = ({
-  isOpen,
+export const CardEditorModal: React.FC<CardEditorModalProps> = ({ isOpen, ...props }) => {
+  const [activeTab, setActiveTab] = useState<'front' | 'back'>('front');
+  if (!isOpen) return null;
+  return (
+    <CardEditorForm
+      key={JSON.stringify([props.editingCardNode?.id, props.defaultParentId])}
+      {...props}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+    />
+  );
+};
+
+function CardEditorForm({
   onClose,
   onSaveCard,
   editingCardNode,
   availableDecks,
   defaultParentId = null,
-}) => {
-  const [name, setName] = useState('');
-  const [front, setFront] = useState('');
-  const [back, setBack] = useState('');
-  const [parentId, setParentId] = useState<string | null>(defaultParentId);
-  const [activeTab, setActiveTab] = useState<'front' | 'back'>('front');
-
-  useEffect(() => {
-    if (editingCardNode && editingCardNode.card) {
-      setName(editingCardNode.name);
-      setFront(editingCardNode.card.front);
-      setBack(editingCardNode.card.back);
-      setParentId(editingCardNode.parentId);
-    } else {
-      setName('');
-      setFront('');
-      setBack('');
-      setParentId(defaultParentId);
-    }
-  }, [editingCardNode, defaultParentId, isOpen]);
-
-  if (!isOpen) return null;
+  activeTab,
+  setActiveTab,
+}: Omit<CardEditorModalProps, 'isOpen'> & {
+  activeTab: 'front' | 'back';
+  setActiveTab: (tab: 'front' | 'back') => void;
+}) {
+  const [name, setName] = useState(editingCardNode?.card ? editingCardNode.name : '');
+  const [front, setFront] = useState(editingCardNode?.card?.front ?? '');
+  const [back, setBack] = useState(editingCardNode?.card?.back ?? '');
+  const [parentId, setParentId] = useState(editingCardNode?.card ? editingCardNode.parentId : defaultParentId);
 
   const insertSnippet = (snippet: string) => {
     if (activeTab === 'front') {
@@ -259,4 +259,4 @@ export const CardEditorModal: React.FC<CardEditorModalProps> = ({
       </div>
     </div>
   );
-};
+}

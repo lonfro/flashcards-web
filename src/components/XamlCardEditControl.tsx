@@ -1,9 +1,11 @@
 'use client';
 
+import { MarkdownAnswerEditor } from './MarkdownAnswerEditor';
 import React, { useState, useEffect, useRef } from 'react';
 import { NodeData } from '../types/flashcard';
 
 interface XamlCardEditControlProps {
+  dividerPath: string;
   cardNode: NodeData | null;
   onSave: (front: string, back: string) => void;
   onCancel: () => void;
@@ -11,25 +13,19 @@ interface XamlCardEditControlProps {
 
 export const XamlCardEditControl: React.FC<XamlCardEditControlProps> = ({
   cardNode,
+  dividerPath,
   onSave,
   onCancel,
 }) => {
-  const [front, setFront] = useState('');
-  const [back, setBack] = useState('');
+  const [front, setFront] = useState(cardNode?.card?.front ?? '');
+  const [back, setBack] = useState(cardNode?.card?.back ?? '');
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (cardNode && cardNode.card) {
-      setFront(cardNode.card.front);
-      setBack(cardNode.card.back);
-    } else {
-      setFront('');
-      setBack('');
-    }
     frontInputRef.current?.focus();
-  }, [cardNode]);
+  }, []);
 
   // Handle ESC key to cancel/done matching XAML KeyboardAccelerator
   useEffect(() => {
@@ -87,22 +83,19 @@ export const XamlCardEditControl: React.FC<XamlCardEditControlProps> = ({
           />
         </div>
 
-        {/* Row 1: Back TextBox (fills remaining height and scrolls internally) */}
-        <div className="space-y-1 flex-1 min-h-0 flex flex-col">
-          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider shrink-0">
-            Back (Answer / Markdown / LaTeX)
-          </label>
-          <textarea
-            ref={backTextAreaRef}
-            value={back}
-            onChange={(e) => setBack(e.target.value)}
-            placeholder="Back answer in Markdown / LaTeX..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 sm:p-4 text-sm sm:text-lg font-mono text-slate-100 focus:outline-none focus:border-indigo-500 resize-none flex-1 min-h-0 overflow-y-auto leading-relaxed"
-          />
-        </div>
+        <MarkdownAnswerEditor
+          textareaRef={backTextAreaRef}
+          value={back}
+          onChange={setBack}
+        />
 
         {/* Row 2: Bottom Button Row */}
-        <div className="flex items-center justify-end space-x-3 pt-1 shrink-0">
+        <div className="flex items-center justify-end gap-3 pt-1 shrink-0 flex-wrap">
+          {dividerPath && (
+            <span className="text-xs text-slate-400 flex-1 min-w-0 truncate" title={dividerPath}>
+              {dividerPath}
+            </span>
+          )}
           <button
             onClick={handleDone}
             className="w-full sm:w-auto px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm sm:text-base rounded-lg transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 touch-manipulation"

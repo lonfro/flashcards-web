@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Palette, Download, Upload, Copy, Check, Sparkles, Folder, FileText } from 'lucide-react';
 import { AppTheme } from '../types/theme';
 import { PRESET_THEMES, applyTheme, getStoredTheme } from '../utils/themePresets';
 
 export const ThemeConfigurator: React.FC = () => {
-  const [activeTheme, setActiveTheme] = useState<AppTheme>(PRESET_THEMES[0]);
-  const [activeTab, setActiveTab] = useState<'presets' | 'custom'>('presets');
+  const [activeTheme, setActiveTheme] = useState(getStoredTheme);
+  const [activeTab, setActiveTab] = useState<'presets' | 'custom'>(activeTheme.isCustom ? 'custom' : 'presets');
   const [copied, setCopied] = useState(false);
 
   // Custom theme editor state
-  const [customTheme, setCustomTheme] = useState<AppTheme>({
+  const [customTheme, setCustomTheme] = useState<AppTheme>(() => activeTheme.isCustom ? activeTheme : {
     id: 'custom-user-theme',
     name: 'My Custom Theme',
     isCustom: true,
@@ -29,16 +29,6 @@ export const ThemeConfigurator: React.FC = () => {
     scrollbarThumb: '#334155',
     scrollbarTrack: '#090d16',
   });
-
-  useEffect(() => {
-    const current = getStoredTheme();
-    setActiveTheme(current);
-    applyTheme(current);
-    if (current.isCustom) {
-      setCustomTheme(current);
-      setActiveTab('custom');
-    }
-  }, []);
 
   const handleSelectPreset = (theme: AppTheme) => {
     setActiveTheme(theme);
@@ -86,7 +76,7 @@ export const ThemeConfigurator: React.FC = () => {
         } else {
           alert('Invalid theme file structure.');
         }
-      } catch (err) {
+      } catch {
         alert('Failed to parse theme JSON file.');
       }
     };

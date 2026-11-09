@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   CardSettingsData,
   DifficultySettingsData,
@@ -61,35 +61,38 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load theme:', e);
     }
 
-    // Load persisted settings
-    try {
-      const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-      if (savedWidth) {
-        setSidebarWidth(parseInt(savedWidth, 10));
-      }
+    const frame = window.requestAnimationFrame(() => {
+      // Load persisted settings
+      try {
+        const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+        if (savedWidth) {
+          setSidebarWidth(parseInt(savedWidth, 10));
+        }
 
-      const savedRefreshEnabled = localStorage.getItem(AUTO_REFRESH_ENABLED_KEY);
-      if (savedRefreshEnabled !== null) {
-        setAutoRefreshEnabled(savedRefreshEnabled === 'true');
-      }
+        const savedRefreshEnabled = localStorage.getItem(AUTO_REFRESH_ENABLED_KEY);
+        if (savedRefreshEnabled !== null) {
+          setAutoRefreshEnabled(savedRefreshEnabled === 'true');
+        }
 
-      const savedRefreshInterval = localStorage.getItem(AUTO_REFRESH_INTERVAL_KEY);
-      if (savedRefreshInterval) {
-        setAutoRefreshInterval(parseInt(savedRefreshInterval, 10));
-      }
+        const savedRefreshInterval = localStorage.getItem(AUTO_REFRESH_INTERVAL_KEY);
+        if (savedRefreshInterval) {
+          setAutoRefreshInterval(parseInt(savedRefreshInterval, 10));
+        }
 
-      const savedCardSettings = localStorage.getItem(CARD_SETTINGS_KEY);
-      if (savedCardSettings) {
-        setCardSettings(JSON.parse(savedCardSettings));
-      }
+        const savedCardSettings = localStorage.getItem(CARD_SETTINGS_KEY);
+        if (savedCardSettings) {
+          setCardSettings(JSON.parse(savedCardSettings));
+        }
 
-      const savedDiffSettings = localStorage.getItem(DIFFICULTY_SETTINGS_KEY);
-      if (savedDiffSettings) {
-        setDifficultySettings(JSON.parse(savedDiffSettings));
+        const savedDiffSettings = localStorage.getItem(DIFFICULTY_SETTINGS_KEY);
+        if (savedDiffSettings) {
+          setDifficultySettings({ ...DEFAULT_DIFFICULTY_SETTINGS, ...JSON.parse(savedDiffSettings) });
+        }
+      } catch (e) {
+        console.error('Failed to load persisted settings:', e);
       }
-    } catch (e) {
-      console.error('Failed to load persisted settings:', e);
-    }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   const handleSidebarWidthChange = (newWidth: number) => {
@@ -119,14 +122,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleUpdateCardSettings = (newSettings: CardSettingsData) => {
+  const handleUpdateCardSettings = useCallback((newSettings: CardSettingsData) => {
     setCardSettings(newSettings);
     try {
       localStorage.setItem(CARD_SETTINGS_KEY, JSON.stringify(newSettings));
     } catch (e) {
       console.error(e);
     }
-  };
+  }, []);
 
   const handleUpdateDifficultySettings = (newSettings: DifficultySettingsData) => {
     setDifficultySettings(newSettings);

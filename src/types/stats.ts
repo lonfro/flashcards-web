@@ -4,8 +4,8 @@ export interface StudyLogEntry {
   cardName: string;
   deckId: string | null;
   deckName: string;
-  difficulty: number; // 0: Again, 1: Hard, 2: Good, 3: Easy
-  difficultyName: 'Again' | 'Hard' | 'Good' | 'Easy';
+  difficulty: number; // 0: Horrible, 1: Bad, 2: Good, 3: Excellent
+  difficultyName: 'Horrible' | 'Bad' | 'Good' | 'Excellent' | 'Again' | 'Hard' | 'Easy';
   reviewedAt: string; // ISO string
   date: string; // YYYY-MM-DD
   weight: number;

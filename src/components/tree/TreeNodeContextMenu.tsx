@@ -9,12 +9,15 @@ import {
   Edit,
   Trash,
   Download,
+  Upload,
+  ArrowUpDown,
 } from 'lucide-react';
 import { TreeNode } from './types';
 import { NodeData } from '../../types/flashcard';
 
 interface TreeNodeContextMenuProps {
   node: TreeNode;
+  position: { x: number; y: number };
   onClose: () => void;
   onAddCard: (parentId: string | null) => void;
   onAddDivider: (parentId: string | null) => void;
@@ -23,11 +26,15 @@ interface TreeNodeContextMenuProps {
   onStartRename: (node: NodeData) => void;
   onDeleteNode: (nodeId: string) => void;
   onResetWeights: (nodeId: string, recursive?: boolean) => void;
+  onToggleProgress: (nodeId: string) => void;
+  onOpenImport: (nodeId: string, mode: 'divider' | 'contents') => void;
+  onSortNodes: (recursive: boolean, parentId: string) => void;
   onExportDivider: (dividerId: string) => void;
 }
 
 export const TreeNodeContextMenu: React.FC<TreeNodeContextMenuProps> = ({
   node,
+  position,
   onClose,
   onAddCard,
   onAddDivider,
@@ -37,12 +44,16 @@ export const TreeNodeContextMenu: React.FC<TreeNodeContextMenuProps> = ({
   onDeleteNode,
   onResetWeights,
   onExportDivider,
+  onToggleProgress,
+  onOpenImport,
+  onSortNodes,
 }) => {
   const isFolder = node.type === 'divider';
 
   return (
     <div
-      className="absolute left-6 sm:left-8 top-8 z-50 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
+      style={{ left: position.x, top: position.y }}
+      className="fixed z-50 w-56 max-h-[60dvh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
       onClick={(e) => e.stopPropagation()}
     >
       {isFolder ? (
@@ -81,6 +92,28 @@ export const TreeNodeContextMenu: React.FC<TreeNodeContextMenuProps> = ({
               <RefreshCw size={14} />
               <span>Revise deck</span>
             </button>
+          </div>
+
+          <div className="py-1">
+            <button
+              role="menuitemcheckbox"
+              aria-checked={!!node.divider?.isProgressShown}
+              onClick={() => {
+                onToggleProgress(node.id);
+                onClose();
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-slate-800"
+            >
+              {node.divider?.isProgressShown ? '✓ ' : ''}Show learning progress
+            </button>
+            {[false, true].map((recursive) => (
+              <button key={String(recursive)} onClick={() => {
+                onSortNodes(recursive, node.id);
+                onClose();
+              }} className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2">
+                <ArrowUpDown size={14} /> Sort contents{recursive ? ' (recursive)' : ''}
+              </button>
+            ))}
           </div>
 
           <div className="py-1">
@@ -130,6 +163,14 @@ export const TreeNodeContextMenu: React.FC<TreeNodeContextMenuProps> = ({
           </div>
 
           <div className="py-1">
+            {(['divider', 'contents'] as const).map((mode) => (
+              <button key={mode} onClick={() => {
+                onOpenImport(node.id, mode);
+                onClose();
+              }} className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2">
+                <Upload size={14} /> Import {mode === 'divider' ? 'divider' : 'divider contents'}
+              </button>
+            ))}
             <button
               onClick={() => {
                 onExportDivider(node.id);

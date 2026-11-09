@@ -2,15 +2,14 @@
 
 import React from 'react';
 import { Settings, RotateCcw, Download, Upload, Info } from 'lucide-react';
-import { NodeData } from '../types/flashcard';
 import { SyncState } from '../utils/googleDriveSync';
 import { CardSettingsData, DifficultySettingsData } from '../types/cardSettings';
 import { ThemeConfigurator } from './ThemeConfigurator';
 import { GoogleDriveSync } from './GoogleDriveSync';
-import { CardSettingsSection } from './CardSettingsSection';
+import { CardSettingsSection, DurationInput } from './CardSettingsSection';
+import { useLibrary } from '../context';
 
 interface XamlSettingsPageProps {
-  nodes: NodeData[];
   accessToken: string | null;
   syncState: SyncState;
   lastSyncTime: string | null;
@@ -34,7 +33,6 @@ interface XamlSettingsPageProps {
 }
 
 export const XamlSettingsPage: React.FC<XamlSettingsPageProps> = ({
-  nodes,
   accessToken,
   syncState,
   lastSyncTime,
@@ -56,6 +54,8 @@ export const XamlSettingsPage: React.FC<XamlSettingsPageProps> = ({
   onImportAll,
   onResetAll,
 }) => {
+  const { backups } = useLibrary();
+  const { intervalMinutes, maxBackups } = backups.settings;
   return (
     <div className="flex-1 h-full p-8 overflow-y-auto max-w-4xl mx-auto space-y-6 select-none">
       <div className="border-b border-slate-800 pb-4">
@@ -83,7 +83,6 @@ export const XamlSettingsPage: React.FC<XamlSettingsPageProps> = ({
 
       {/* Google Drive Cloud Sync */}
       <GoogleDriveSync
-        nodes={nodes}
         accessToken={accessToken}
         syncState={syncState}
         lastSyncTime={lastSyncTime}
@@ -96,6 +95,58 @@ export const XamlSettingsPage: React.FC<XamlSettingsPageProps> = ({
         onToggleAutoRefresh={onToggleAutoRefresh}
         onChangeRefreshInterval={onChangeRefreshInterval}
       />
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-200">Library backups</h3>
+            <p className="text-xs text-slate-400">Backups are kept in this browser and can be downloaded as Windows JSON.</p>
+          </div>
+          <button
+            onClick={() => void backups.saveBackup()}
+            disabled={backups.isSaving}
+            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs text-slate-200 shrink-0"
+          >
+            Back up now
+          </button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <p className="text-xs text-slate-300">Automatic backup interval</p>
+            <DurationInput
+              label="Automatic backup interval"
+              minutes={intervalMinutes}
+              onChange={(minutes) => backups.updateSettings(minutes, maxBackups)}
+            />
+            <p className="text-xs text-slate-500">Set to zero to disable. Backups run while Flashcards is open.</p>
+          </div>
+          <label className="text-xs text-slate-300 flex items-center gap-2 self-start">
+            Backups to keep
+            <input
+              type="number"
+              min="1"
+              value={maxBackups}
+              onChange={(event) => backups.updateSettings(
+                intervalMinutes, Math.max(1, Math.round(event.target.valueAsNumber || 1))
+              )}
+              className="w-20 px-2 py-1 bg-slate-950 border border-slate-700 rounded"
+            />
+          </label>
+        </div>
+        {backups.error && <p role="alert" className="text-xs text-rose-400">{backups.error}</p>}
+        {!!backups.times?.length && (
+          <ul className="max-h-48 overflow-y-auto divide-y divide-slate-800">
+            {[...backups.times].reverse().map((time) => (
+              <li key={time} className="flex items-center justify-between gap-3 py-2 text-xs">
+                <time dateTime={new Date(time).toISOString()} className="text-slate-300">{new Date(time).toLocaleString()}</time>
+                <button onClick={() => void backups.downloadBackup(time)} className="text-indigo-300 hover:text-indigo-200">
+                  Download
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {/* Data Options */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">

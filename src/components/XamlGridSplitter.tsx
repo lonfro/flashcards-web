@@ -3,14 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 interface XamlGridSplitterProps {
-  width: number;
   onWidthChange: (newWidth: number) => void;
   minWidth?: number;
   maxWidth?: number;
 }
 
 export const XamlGridSplitter: React.FC<XamlGridSplitterProps> = ({
-  width,
   onWidthChange,
   minWidth = 180,
   maxWidth = 500,

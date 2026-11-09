@@ -17,12 +17,15 @@ export interface CardData {
   interval: number;     // Days until next review
   reviewCount: number;  // Total reviews
   lastReviewed?: string;// ISO timestamp string
-  nextReviewDate?: string; // ISO timestamp string
+  nextReviewDate?: string; // Legacy SM-2 timestamp
+  hideUntil?: string;   // Windows revision cooldown, ISO timestamp
 }
 
 export interface DividerData {
   id: string;
   nodeId: string;
+  isProgressShown?: boolean;
+  isExpanded?: boolean;
   description?: string;
   color?: string;       // Custom accent color
   icon?: string;        // Custom icon key

@@ -59,9 +59,9 @@ async function handleRefresh(request: NextRequest) {
       accessToken,
       expiresIn,
     });
-  } catch (err: any) {
+  } catch (err) {
     return NextResponse.json(
-      { success: false, error: 'exception', message: err.message },
+      { success: false, error: 'exception', message: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
     );
   }

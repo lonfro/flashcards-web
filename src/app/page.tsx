@@ -11,6 +11,7 @@ import { XamlCardAddControl } from '../components/XamlCardAddControl';
 import { XamlRevisionPage } from '../components/XamlRevisionPage';
 import { XamlStatsPage } from '../components/XamlStatsPage';
 import { XamlSettingsPage } from '../components/XamlSettingsPage';
+import { getDividerPath } from '../utils/storage';
 import { XamlGridSplitter } from '../components/XamlGridSplitter';
 
 export default function HomePage() {
@@ -20,6 +21,7 @@ export default function HomePage() {
     selectedNodeId,
     selectedNode,
     selectedCardNode,
+    addCardParentId,
     revisionDividerNode,
     cardsToRevise,
     setSelectedNodeId,
@@ -33,6 +35,7 @@ export default function HomePage() {
     handleRenameNode,
     handleDeleteNode,
     handleResetWeights,
+    handleToggleProgress,
     handleExportAll,
     handleImportAll,
     handleResetAll,
@@ -122,6 +125,7 @@ export default function HomePage() {
                 nodes={nodes}
                 selectedNodeId={selectedNodeId}
                 width={sidebarWidth}
+                cardSettings={cardSettings}
                 onSelectNode={handleSelectNode}
                 onAddCard={handleTriggerAddCard}
                 onAddDivider={handleAddDivider}
@@ -136,6 +140,7 @@ export default function HomePage() {
                 onRenameNode={handleRenameNode}
                 onDeleteNode={handleDeleteNode}
                 onResetWeights={handleResetWeights}
+                onToggleProgress={handleToggleProgress}
                 onExportDivider={handleExportAll}
                 onImportDivider={handleImportAll}
                 onMoveNode={handleMoveNode}
@@ -146,7 +151,6 @@ export default function HomePage() {
             {/* WinUI 3 GridSplitter Column (Hidden on mobile) */}
             <div className="hidden md:block">
               <XamlGridSplitter
-                width={sidebarWidth}
                 onWidthChange={handleSidebarWidthChange}
                 minWidth={180}
                 maxWidth={500}
@@ -175,12 +179,15 @@ export default function HomePage() {
 
               {rightViewMode === 'CardAddView' ? (
                 <XamlCardAddControl
+                  dividerPath={getDividerPath(nodes, addCardParentId)}
                   onAddCard={handleSaveNewCard}
                   onDone={() => setRightViewMode('CardView')}
                 />
               ) : rightViewMode === 'CardEditView' ? (
                 <XamlCardEditControl
+                  key={(editingCardNode || selectedCardNode)?.id}
                   cardNode={editingCardNode || selectedCardNode}
+                  dividerPath={getDividerPath(nodes, (editingCardNode || selectedCardNode)?.parentId ?? null)}
                   onSave={handleSaveCardEdit}
                   onCancel={() => setRightViewMode('CardView')}
                 />
@@ -202,6 +209,7 @@ export default function HomePage() {
 
         {activePage === 'RevisionPage' && (
           <XamlRevisionPage
+            key={revisionDividerNode?.id ?? 'root'}
             selectedDividerNode={revisionDividerNode}
             cardsToRevise={cardsToRevise}
             cardSettings={cardSettings}
@@ -215,15 +223,11 @@ export default function HomePage() {
         )}
 
         {activePage === 'StatsPage' && (
-          <XamlStatsPage
-            nodes={nodes}
-            onGoToRevision={() => handleNavigate('RevisionPage')}
-          />
+          <XamlStatsPage nodes={nodes} />
         )}
 
         {activePage === 'SettingsPage' && (
           <XamlSettingsPage
-            nodes={nodes}
             accessToken={accessToken}
             syncState={syncState}
             lastSyncTime={lastSyncTime}

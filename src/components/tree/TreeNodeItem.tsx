@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Folder,
   FolderOpen,
@@ -9,12 +10,17 @@ import {
   ChevronDown,
   MoreVertical,
 } from 'lucide-react';
+import { CardSettingsData } from '../../types/cardSettings';
 import { TreeNode } from './types';
 import { NodeData } from '../../types/flashcard';
 import { TreeNodeContextMenu } from './TreeNodeContextMenu';
 
 interface TreeNodeItemProps {
   node: TreeNode;
+  cardSettings: CardSettingsData;
+  onToggleProgress: (nodeId: string) => void;
+  onOpenImport: (nodeId: string, mode: 'divider' | 'contents') => void;
+  onSortNodes: (recursive: boolean, parentId: string) => void;
   depth?: number;
   selectedNodeId: string | null;
   expandedFolderIds: Record<string, boolean>;
@@ -45,6 +51,10 @@ interface TreeNodeItemProps {
 
 export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   node,
+  cardSettings,
+  onToggleProgress,
+  onOpenImport,
+  onSortNodes,
   depth = 0,
   selectedNodeId,
   expandedFolderIds,
@@ -78,6 +88,24 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   const isEditing = editingNodeId === node.id;
   const isMenuOpen = activeMenuNodeId === node.id;
 
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const openMenu = (x: number, y: number) => {
+    const height = Math.min(window.innerHeight * 0.6, 490);
+    setMenuPosition({
+      x: Math.max(8, Math.min(x, window.innerWidth - 232)),
+      y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
+    });
+    onOpenMenu(node.id);
+  };
+
+  const difference = cardSettings.maximumWeight - cardSettings.minimumWeight;
+  const buffer = difference / 10;
+  const progress = node.cardCount && difference > 0
+    ? Math.min(1, Math.max(0, (cardSettings.maximumWeight - node.totalWeight / node.cardCount + buffer) / (difference + buffer)))
+    : 0;
+  const fill = `rgb(${Math.min(1, 2 - progress * 2) * 217} ${Math.min(1, progress * 2) * 217} 0 / 20%)`;
+  const showProgress = isFolder && node.divider?.isProgressShown;
+
   const isDropBefore = dropTarget?.nodeId === node.id && dropTarget.position === 'before';
   const isDropAfter = dropTarget?.nodeId === node.id && dropTarget.position === 'after';
   const isDropInto = dropTarget?.nodeId === node.id && dropTarget.position === 'into';
@@ -102,9 +130,13 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          onOpenMenu(node.id);
+          openMenu(e.clientX, e.clientY);
         }}
-        style={{ paddingLeft: `${Math.max(8, depth * 14 + 6)}px` }}
+        style={{
+          paddingLeft: `${Math.max(8, depth * 14 + 6)}px`,
+          backgroundImage: showProgress ? `linear-gradient(to right, ${fill} ${progress * 100}%, transparent ${progress * 100}%)` : undefined,
+        }}
+        title={showProgress ? `Deck progress: ${Math.round(progress * 100)}%` : undefined}
         className={`flex items-center justify-between h-9 sm:h-8 pr-2 rounded-md text-xs cursor-pointer transition-colors select-none relative shrink-0 ${
           isSelected
             ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500 shadow-sm'
@@ -173,7 +205,8 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
               if (isMenuOpen) {
                 onCloseMenu();
               } else {
-                onOpenMenu(node.id);
+                const { left, bottom } = e.currentTarget.getBoundingClientRect();
+                openMenu(left, bottom);
               }
             }}
             className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 opacity-80 md:hidden transition-opacity touch-manipulation"
@@ -190,9 +223,10 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
       )}
 
       {/* Context Menu Flyout */}
-      {isMenuOpen && (
+      {isMenuOpen && createPortal(
         <TreeNodeContextMenu
           node={node}
+          position={menuPosition}
           onClose={onCloseMenu}
           onAddCard={onAddCard}
           onAddDivider={onAddDivider}
@@ -202,7 +236,11 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
           onDeleteNode={onDeleteNode}
           onResetWeights={onResetWeights}
           onExportDivider={onExportDivider}
-        />
+          onToggleProgress={onToggleProgress}
+          onOpenImport={onOpenImport}
+          onSortNodes={onSortNodes}
+        />,
+        document.body
       )}
 
       {/* Render Folder Children */}
@@ -212,6 +250,10 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
             <TreeNodeItem
               key={child.id}
               node={child}
+              cardSettings={cardSettings}
+              onToggleProgress={onToggleProgress}
+              onOpenImport={onOpenImport}
+              onSortNodes={onSortNodes}
               depth={depth + 1}
               selectedNodeId={selectedNodeId}
               expandedFolderIds={expandedFolderIds}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   MoreVertical,
@@ -19,6 +19,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   nodes,
   selectedNodeId,
   width,
+  cardSettings,
   onSelectNode,
   onAddCard,
   onAddDivider,
@@ -27,18 +28,26 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   onRenameNode,
   onDeleteNode,
   onResetWeights,
+  onToggleProgress,
   onExportDivider,
   onImportDivider,
   onMoveNode,
   onSortNodes,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [expandedFolderIds, setExpandedFolderIds] = useState<Record<string, boolean>>({});
+  const [expansionOverrides, setExpandedFolderIds] = useState<Record<string, boolean>>({});
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [activeMenuNodeId, setActiveMenuNodeId] = useState<string | null>(null);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'into' } | null>(null);
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importTarget = useRef<{ id: string | null; mode: 'divider' | 'contents' }>({ id: null, mode: 'contents' });
+  const openImport = (id: string | null, mode: 'divider' | 'contents') => {
+    importTarget.current = { id, mode };
+    fileInput.current?.click();
+  };
 
   // Root Context Menu Flyout State
   const [isRootMenuOpen, setIsRootMenuOpen] = useState<boolean>(false);
@@ -56,59 +65,52 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
 
   // Build hierarchical tree with recursive card counts
   const treeData = useMemo(() => {
+    const byParent = new Map<string | null, NodeData[]>();
+    for (const node of nodes) {
+      const siblings = byParent.get(node.parentId) ?? [];
+      siblings.push(node);
+      byParent.set(node.parentId, siblings);
+    }
     const buildTree = (parentId: string | null): TreeNode[] => {
-      return nodes
-        .filter((n) => n.parentId === parentId)
-        .map((node) => {
-          const childrenNodes = buildTree(node.id);
-          let cardCount = 0;
-          if (node.type === 'card') {
-            cardCount = 1;
-          } else {
-            const countCards = (items: NodeData[]): number => {
-              let count = 0;
-              for (const item of items) {
-                if (item.type === 'card') count += 1;
-                else if (item.type === 'divider') {
-                  const children = nodes.filter((n) => n.parentId === item.id);
-                  count += countCards(children);
-                }
-              }
-              return count;
-            };
-            const directChildren = nodes.filter((n) => n.parentId === node.id);
-            cardCount = countCards(directChildren);
-          }
-
-          return {
-            ...node,
-            childrenNodes,
-            cardCount,
-          };
-        });
+      return (byParent.get(parentId) ?? []).map((node) => {
+        const childrenNodes = buildTree(node.id);
+        return {
+          ...node,
+          childrenNodes,
+          cardCount: node.card ? 1 : childrenNodes.reduce((sum, child) => sum + child.cardCount, 0),
+          totalWeight: node.card?.weight ?? childrenNodes.reduce((sum, child) => sum + child.totalWeight, 0),
+        };
+      });
     };
 
     return buildTree(null);
   }, [nodes]);
 
-  // Search Results
+  const expandedFolderIds = useMemo(() => ({
+    ...Object.fromEntries(nodes.filter(({ divider }) => divider?.isExpanded).map(({ id }) => [id, true])),
+    ...expansionOverrides,
+  }), [nodes, expansionOverrides]);
+
   const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return nodes.filter(
-      (n) =>
-        n.type === 'card' &&
-        n.card &&
-        (n.name.toLowerCase().includes(q) ||
-          n.card.front.toLowerCase().includes(q) ||
-          n.card.back.toLowerCase().includes(q))
-    );
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+
+    const frontMatches: NodeData[] = [];
+    const otherMatches: NodeData[] = [];
+    for (const node of nodes) {
+      if (!node.card) continue;
+      if (node.card.front.toLowerCase().includes(query)) frontMatches.push(node);
+      else if (node.card.back.toLowerCase().includes(query) || node.name.toLowerCase().includes(query)) {
+        otherMatches.push(node);
+      }
+    }
+    return [...frontMatches, ...otherMatches];
   }, [nodes, searchQuery]);
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolderIds((prev) => ({
       ...prev,
-      [folderId]: !prev[folderId],
+      [folderId]: !expandedFolderIds[folderId],
     }));
   };
 
@@ -201,7 +203,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
 
   const handleStartRename = (node: NodeData) => {
     setEditingNodeId(node.id);
-    setEditingName(node.name);
+    setEditingName(node.card?.front ?? node.name);
     setActiveMenuNodeId(null);
   };
 
@@ -322,6 +324,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
         {searchQuery.trim() ? (
           <TreeSearchResults
             searchResults={searchResults}
+            query={searchQuery.trim()}
             selectedNodeId={selectedNodeId}
             onSelectResult={expandAncestorsAndSelect}
             onClearSearch={() => setSearchQuery('')}
@@ -336,6 +339,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
             <TreeNodeItem
               key={rootNode.id}
               node={rootNode}
+              cardSettings={cardSettings}
               depth={0}
               selectedNodeId={selectedNodeId}
               expandedFolderIds={expandedFolderIds}
@@ -365,6 +369,9 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               onDeleteNode={onDeleteNode}
               onResetWeights={onResetWeights}
               onExportDivider={onExportDivider}
+              onToggleProgress={onToggleProgress}
+              onOpenImport={openImport}
+              onSortNodes={onSortNodes}
             />
           ))
         )}
@@ -412,6 +419,14 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
         </button>
       </div>
 
+      <input
+        type="file"
+        ref={fileInput}
+        accept=".json"
+        hidden
+        onChange={(event) => onImportDivider(event, importTarget.current.id, importTarget.current.mode)}
+      />
+
       {/* Root Context Menu */}
       {isRootMenuOpen && (
         <TreeRootContextMenu
@@ -421,7 +436,8 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
           onAddDivider={onAddDivider}
           onReviseDivider={() => onReviseDivider(null)}
           onSortNodes={onSortNodes}
-          onImportDivider={onImportDivider}
+          onOpenImport={openImport}
+          onResetWeights={onResetWeights}
           onExportDivider={onExportDivider}
         />
       )}

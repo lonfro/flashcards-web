@@ -1,14 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Cloud, CloudUpload, CloudDownload, Key, Check, AlertCircle, RefreshCw, LogOut, Clock } from 'lucide-react';
-import { NodeData } from '../types/flashcard';
 import { SyncState, STORAGE_CLIENT_ID_KEY } from '../utils/googleDriveSync';
 
 const DEFAULT_CLIENT_ID = '477566603394-gpj2v25u4pb39ci67j0bqt7d11vud4u4.apps.googleusercontent.com';
 
 interface GoogleDriveSyncProps {
-  nodes: NodeData[];
   accessToken: string | null;
   syncState: SyncState;
   lastSyncTime: string | null;
@@ -23,7 +21,6 @@ interface GoogleDriveSyncProps {
 }
 
 export const GoogleDriveSync: React.FC<GoogleDriveSyncProps> = ({
-  nodes,
   accessToken,
   syncState,
   lastSyncTime,
@@ -36,16 +33,15 @@ export const GoogleDriveSync: React.FC<GoogleDriveSyncProps> = ({
   onToggleAutoRefresh,
   onChangeRefreshInterval,
 }) => {
-  const [clientId, setClientId] = useState<string>(DEFAULT_CLIENT_ID);
-
-  useEffect(() => {
+  const [clientId, setClientId] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_CLIENT_ID;
     try {
-      const savedId = localStorage.getItem(STORAGE_CLIENT_ID_KEY);
-      if (savedId) setClientId(savedId);
-    } catch (e) {
-      console.error(e);
+      return localStorage.getItem(STORAGE_CLIENT_ID_KEY) || DEFAULT_CLIENT_ID;
+    } catch (error) {
+      console.error(error);
+      return DEFAULT_CLIENT_ID;
     }
-  }, []);
+  });
 
   const handleSaveClientId = (newId: string) => {
     setClientId(newId);

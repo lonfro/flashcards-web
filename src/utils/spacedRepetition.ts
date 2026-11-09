@@ -4,90 +4,48 @@ import {
   DifficultySettingsData,
   DEFAULT_CARD_SETTINGS,
   DEFAULT_DIFFICULTY_SETTINGS,
+  REVISION_RATINGS,
 } from '../types/cardSettings';
 
-/**
- * Calculates next review parameters matching WinUI 3 SM-2 + DifficultySettings.cs & CardSettings.cs.
- */
 export function calculateNextReview(
   card: CardData,
   difficulty: Difficulty,
   cardSettings: CardSettingsData = DEFAULT_CARD_SETTINGS,
-  difficultySettings: DifficultySettingsData = DEFAULT_DIFFICULTY_SETTINGS
+  difficultySettings: DifficultySettingsData = DEFAULT_DIFFICULTY_SETTINGS,
+  now: number = Date.now()
 ): Partial<CardData> {
-  let { easeFactor, interval, reviewCount } = card;
-
-  // Quality mapping for SM-2
-  let quality = 0;
-  switch (difficulty) {
-    case Difficulty.Again:
-      quality = 0;
-      break;
-    case Difficulty.Hard:
-      quality = 3;
-      break;
-    case Difficulty.Good:
-      quality = 4;
-      break;
-    case Difficulty.Easy:
-      quality = 5;
-      break;
-  }
-
-  // Update Ease Factor: EF' = EF + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-  easeFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-  if (easeFactor < 1.3) {
-    easeFactor = 1.3;
-  }
-
-  if (quality < 3) {
-    reviewCount = 0;
-    interval = 1;
-  } else {
-    if (reviewCount === 0) {
-      interval = 1;
-    } else if (reviewCount === 1) {
-      interval = 6;
-    } else {
-      interval = Math.round(interval * easeFactor);
-    }
-    reviewCount += 1;
-  }
-
-  const now = new Date();
-  const nextDate = new Date(now.getTime() + interval * 24 * 60 * 60 * 1000);
-
-  // Weight calculation matching C# WinUI 3 DifficultySettings.cs & CardSettings.cs:
-  let delta = 0;
-  switch (difficulty) {
-    case Difficulty.Again:
-      delta = difficultySettings.againDelta; // default +7.0
-      break;
-    case Difficulty.Hard:
-      delta = difficultySettings.hardDelta;  // default +5.0
-      break;
-    case Difficulty.Good:
-      delta = difficultySettings.goodDelta;  // default -2.0
-      break;
-    case Difficulty.Easy:
-      delta = difficultySettings.easyDelta;  // default -5.0
-      break;
-  }
-
-  const currentWeight = typeof card.weight === 'number' ? card.weight : cardSettings.defaultWeight;
-  const weight = Math.min(
-    cardSettings.maximumWeight,
-    Math.max(cardSettings.minimumWeight, currentWeight + delta)
-  );
-
+  const rating = REVISION_RATINGS[difficulty];
   return {
-    easeFactor,
-    interval,
-    reviewCount,
-    weight,
-    lastReviewed: now.toISOString(),
-    nextReviewDate: nextDate.toISOString(),
+    weight: Math.min(cardSettings.maximumWeight, Math.max(
+      cardSettings.minimumWeight, card.weight + difficultySettings[rating.weight]
+    )),
+    hideUntil: new Date(now + difficultySettings[rating.delay] * 60_000).toISOString(),
+    lastReviewed: new Date(now).toISOString(),
+    reviewCount: card.reviewCount + 1,
   };
+}
+
+export function dealRevisionCard(
+  cards: NodeData[],
+  previousId: string | null,
+  now: number = Date.now(),
+  random: number = Math.random()
+): NodeData | null {
+  const eligible = cards.filter(({ card }) =>
+    card && (!card.hideUntil || Date.parse(card.hideUntil) < now)
+  );
+  if (eligible.length <= 1) return eligible[0] ?? null;
+
+  const candidates = eligible.filter(({ id }) => id !== previousId);
+  const totalWeight = candidates.reduce((sum, node) => sum + Math.max(0, node.card!.weight), 0);
+  if (totalWeight === 0) return candidates[0];
+
+  let remaining = random * totalWeight;
+  for (const node of candidates) {
+    remaining -= Math.max(0, node.card!.weight);
+    if (remaining < 0) return node;
+  }
+  return candidates[candidates.length - 1];
 }
 
 /**
@@ -104,14 +62,11 @@ export function applyWeightDecay(
   const lastDecay = cardSettings.lastDecayTime ? new Date(cardSettings.lastDecayTime).getTime() : now;
   const decayIntervalMs = cardSettings.decayDurationHours * 3600 * 1000;
 
-  let elapsed = now - lastDecay;
+  const elapsed = now - lastDecay;
   if (elapsed < decayIntervalMs) return null;
 
-  let totalDecayWeight = 0;
-  while (elapsed >= decayIntervalMs) {
-    elapsed -= decayIntervalMs;
-    totalDecayWeight += cardSettings.decayWeight;
-  }
+  const intervals = Math.floor(elapsed / decayIntervalMs);
+  const totalDecayWeight = intervals * cardSettings.decayWeight;
 
   const updatedNodes = nodes.map((node) => {
     if (node.type === 'card' && node.card) {
@@ -128,6 +83,6 @@ export function applyWeightDecay(
     return node;
   });
 
-  const newLastDecayTime = new Date(now - elapsed).toISOString();
+  const newLastDecayTime = new Date(lastDecay + intervals * decayIntervalMs).toISOString();
   return { updatedNodes, newLastDecayTime };
 }

@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         const userData = await userRes.json();
         userEmail = userData.email || '';
       }
-    } catch (e) {}
+    } catch {}
 
     const response = new NextResponse(
       `<!DOCTYPE html>
@@ -131,9 +131,9 @@ export async function GET(request: NextRequest) {
     }
 
     return response;
-  } catch (err: any) {
+  } catch (err) {
     return new NextResponse(
-      `<html><body><h2>Sign-in failed: ${err.message}</h2></body></html>`,
+      `<html><body><h2>Sign-in failed: ${err instanceof Error ? err.message : 'Unknown error'}</h2></body></html>`,
       { headers: { 'Content-Type': 'text/html' }, status: 500 }
     );
   }

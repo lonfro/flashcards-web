@@ -1,203 +1,176 @@
 import { NodeData } from '../types/flashcard';
 
-export interface WinUICardJson {
+interface WinUICardJson {
   $type: 'Card';
   Front: string;
+  HideUntil: string;
   Back: string;
   Weight: number;
 }
 
-export interface WinUIDividerJson {
-  $type: 'Divider';
+interface WinUIDividerJson {
+  $type?: 'Divider';
   Name: string;
-  Children: (WinUIDividerJson | WinUICardJson)[];
-  TotalChildren: number;
+  Children: WinUINodeJson[];
+  IsProgressShown: boolean;
   IsExpanded: boolean;
 }
 
-export interface LibraryTreeJson {
-  Contents: (WinUIDividerJson | WinUICardJson)[];
-}
+type WinUINodeJson = WinUICardJson | WinUIDividerJson;
+type ImportMode = 'auto' | 'divider' | 'contents';
 
-export interface WinUISyncMetadataJson {
-  Hash: string;
-  ModifiedAt: string;
-}
-
-/**
- * Escapes characters matching C# System.Text.Json default JavaScriptEncoder 1:1
- * (Escapes quotes \", non-ASCII characters (> 127) and HTML chars ', +, <, >, & as uppercase hex \uXXXX)
- */
-function escapeCSharpJson(jsonStr: string): string {
-  const escapedQuotes = jsonStr.replace(/\\"/g, '\\u0022');
-  return escapedQuotes.replace(/[\u007f-\uffff'<>&+]/g, (c) => {
-    return '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0').toUpperCase();
+function escapeCSharpJson(json: string): string {
+  return json.replace(/("HideUntil":\s*)?("(?:[^"\\]|\\.)*")/g, (token, datePrefix, stringToken) => {
+    if (datePrefix) return token; // DateTimeOffset is written directly by System.Text.Json.
+    return stringToken.replace(/\\["\\]|[\u007f-\uffff'<>&+`]/g, (character: string) => {
+      if (character === '\\\\') return character;
+      const code = character === '\\"' ? 34 : character.charCodeAt(0);
+      return '\\u' + code.toString(16).padStart(4, '0').toUpperCase();
+    });
   });
 }
 
-/**
- * Converts internal NodeData[] structure into 1:1 WinUI C# LibraryTree JSON format ({ "Contents": [...] }).
- * Matches C# AppJsonContext / JsonSerializer output 1:1 including TotalChildren, IsExpanded, and JavaScriptEncoder Unicode escaping.
- */
-export function exportToWinUIJson(
-  nodes: NodeData[],
-  targetDividerId?: string | null,
-  pretty: boolean = true
-): string {
-  const rootNodes = targetDividerId
-    ? nodes.filter((n) => n.id === targetDividerId)
-    : nodes.filter((n) => !n.parentId || n.parentId === 'root');
-
-  const convertNode = (nodeId: string): WinUIDividerJson | WinUICardJson | null => {
-    const node = nodes.find((n) => n.id === nodeId);
-    if (!node) return null;
-
-    if (node.type === 'card' && node.card) {
-      return {
-        $type: 'Card',
-        Front: node.card.front || '',
-        Back: node.card.back || '',
-        Weight: typeof node.card.weight === 'number' ? Math.round(node.card.weight * 10) / 10 : 20.0,
-      };
-    }
-
-    if (node.type === 'divider') {
-      const childrenNodes = nodes.filter((n) => n.parentId === nodeId);
-      const mappedChildren = childrenNodes
-        .map((child) => convertNode(child.id))
-        .filter((child): child is WinUIDividerJson | WinUICardJson => child !== null);
-
-      const countCards = (items: (WinUIDividerJson | WinUICardJson)[]): number => {
-        let count = 0;
-        for (const item of items) {
-          if (item.$type === 'Card') count += 1;
-          else if (item.$type === 'Divider' && item.Children) {
-            count += countCards(item.Children);
-          }
-        }
-        return count;
-      };
-
-      return {
-        $type: 'Divider',
-        Name: node.name || 'Divider',
-        Children: mappedChildren,
-        TotalChildren: countCards(mappedChildren),
-        IsExpanded: false,
-      };
-    }
-
-    return null;
-  };
-
-  const exportedTree = rootNodes
-    .map((root) => convertNode(root.id))
-    .filter((x): x is WinUIDividerJson | WinUICardJson => x !== null);
-
-  const rawJson = targetDividerId
-    ? JSON.stringify(exportedTree, null, pretty ? 2 : undefined)
-    : JSON.stringify({ Contents: exportedTree }, null, pretty ? 2 : undefined);
-
-  return escapeCSharpJson(rawJson);
+function formatHideUntil(value?: string): string {
+  return (value ?? '1970-01-01T00:00:00Z')
+    .replace(/(\.\d*?[1-9])0+(?=Z|[+-]\d\d:\d\d$)|\.0+(?=Z|[+-]\d\d:\d\d$)/, '$1')
+    .replace(/Z$/, '+00:00');
 }
 
-/**
- * Imports 1:1 WinUI C# JSON format into internal NodeData[] structure.
- * Supports LibraryTree ({ "Contents": [...] }), legacy SyncFile ({ "Library": [...] }), raw array [...], or single object.
- */
-export function importFromWinUIJson(
-  jsonData: any,
-  existingNodes: NodeData[] = [],
-  targetParentId: string | null = null,
-  replaceMode: boolean = false
-): NodeData[] {
-  let parsed = jsonData;
-  if (typeof parsed === 'string') {
-    try {
-      parsed = JSON.parse(parsed);
-    } catch (e) {
-      console.error('Failed to parse JSON string in importFromWinUIJson:', e);
-      return replaceMode ? [] : existingNodes;
-    }
+/** A library and an exported deck are both serialized as a concrete Divider. */
+export function exportToWinUIJson(
+  nodes: NodeData[],
+  targetDividerId: string | null = null,
+  pretty = true
+): string {
+  const childrenByParent = new Map<string | null, NodeData[]>();
+  for (const node of nodes) {
+    const parent = node.parentId === 'root' ? null : node.parentId;
+    const siblings = childrenByParent.get(parent) ?? [];
+    siblings.push(node);
+    childrenByParent.set(parent, siblings);
   }
 
-  const newNodes: NodeData[] = replaceMode ? [] : [...existingNodes];
+  function children(parent: string | null): WinUINodeJson[] {
+    return (childrenByParent.get(parent) ?? []).flatMap<WinUINodeJson>((node) => {
+      if (node.type === 'divider') return [{ $type: 'Divider', ...divider(node) }];
+      if (!node.card) return [];
+      return [{
+        $type: 'Card',
+        Front: node.card.front,
+        HideUntil: formatHideUntil(node.card.hideUntil),
+        Back: node.card.back,
+        Weight: node.card.weight,
+      }];
+    });
+  }
 
-  const processItem = (item: any, parentId: string | null) => {
-    if (!item) return;
+  function divider(node?: NodeData): WinUIDividerJson {
+    return {
+      Name: node?.name ?? 'Root',
+      Children: children(node?.id ?? null),
+      IsProgressShown: node?.divider?.isProgressShown ?? false,
+      IsExpanded: node?.divider?.isExpanded ?? false,
+    };
+  }
 
-    const isCard = item.$type === 'Card' || (item.Front !== undefined && item.Back !== undefined);
-    const isDivider = item.$type === 'Divider' || Array.isArray(item.Children);
+  const target = targetDividerId ? nodes.find((node) => node.id === targetDividerId && node.type === 'divider') : undefined;
+  return escapeCSharpJson(JSON.stringify(divider(target), null, pretty ? 2 : undefined));
+}
 
-    if (isCard) {
-      const nodeId = `node-card-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Reads current Windows dividers, legacy library wrappers and array exports. */
+export function importFromWinUIJson(
+  jsonData: unknown,
+  existingNodes: NodeData[] = [],
+  targetParentId: string | null = null,
+  replaceMode = false,
+  mode: ImportMode = 'auto'
+): NodeData[] {
+  const parsed: unknown = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+  const newNodes = replaceMode ? [] : [...existingNodes];
+  const timestamp = new Date().toISOString();
+
+  function processItem(item: unknown, parentId: string | null) {
+    if (!isRecord(item)) throw new Error('Invalid library item');
+    const { Front, Back, Weight, HideUntil, Name, Children, IsProgressShown, IsExpanded } = item;
+    const isCard = item.$type === 'Card' || (typeof Front === 'string' && typeof Back === 'string');
+    const id = crypto.randomUUID();
+
+    if (isCard && typeof Front === 'string' && typeof Back === 'string') {
+      if (HideUntil != null && (typeof HideUntil !== 'string' || !Number.isFinite(Date.parse(HideUntil)))) {
+        throw new Error('Invalid card review date');
+      }
       newNodes.push({
-        id: nodeId,
-        name: item.Front ? item.Front.slice(0, 35).replace(/[#*`]/g, '') : 'Imported Card',
+        id,
+        name: Front.slice(0, 35).replace(/[#*`]/g, '') || 'Imported Card',
         type: 'card',
         parentId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: timestamp,
+        updatedAt: timestamp,
         card: {
-          id: `card-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          nodeId,
-          front: item.Front || '',
-          back: item.Back || '',
-          weight: typeof item.Weight === 'number' ? item.Weight : 20.0,
+          id: crypto.randomUUID(),
+          nodeId: id,
+          front: Front,
+          back: Back,
+          weight: typeof Weight === 'number' && Number.isFinite(Weight) ? Weight : 20,
+          hideUntil: typeof HideUntil === 'string' ? HideUntil : undefined,
           easeFactor: 2.5,
           interval: 1,
           reviewCount: 0,
         },
       });
-    } else if (isDivider) {
-      const nodeId = `node-deck-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    } else if (Array.isArray(Children) && typeof Name === 'string') {
       newNodes.push({
-        id: nodeId,
-        name: item.Name || 'Imported Divider',
+        id,
+        name: Name,
         type: 'divider',
         parentId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: timestamp,
+        updatedAt: timestamp,
         divider: {
-          id: `div-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          nodeId,
+          id: crypto.randomUUID(),
+          nodeId: id,
           description: '',
+          isProgressShown: IsProgressShown === true,
+          isExpanded: IsExpanded === true,
         },
       });
-
-      if (Array.isArray(item.Children)) {
-        item.Children.forEach((child: any) => processItem(child, nodeId));
-      }
+      Children.forEach((child) => processItem(child, id));
+    } else {
+      throw new Error('Invalid library item');
     }
-  };
+  }
 
-  const payload =
-    parsed?.Contents ||
-    parsed?.contents ||
-    parsed?.Library ||
-    parsed?.library ||
-    parsed;
+  const wrapper = isRecord(parsed) ? parsed.Contents ?? parsed.contents ?? parsed.Library ?? parsed.library : undefined;
+  const unwrapDivider = isRecord(parsed) && (replaceMode || mode === 'contents' ||
+    (mode === 'auto' && parsed.Name === 'Root'));
+  const payload = wrapper ?? (unwrapDivider ? parsed.Children : parsed);
 
   if (Array.isArray(payload)) {
     payload.forEach((item) => processItem(item, targetParentId));
-  } else if (typeof payload === 'object' && payload !== null) {
+  } else if (!unwrapDivider && wrapper === undefined) {
     processItem(payload, targetParentId);
+  } else {
+    throw new Error('Invalid library contents');
   }
-
   return newNodes;
 }
 
-/**
- * Calculates SHA-256 hash string for sync.json metadata 1:1 matching WinUI C# SyncMetadataService / ComputeHash
- */
-export async function calculateJsonHash(jsonStr: string): Promise<string> {
-  const normalizedStr = jsonStr.replace(/\r\n/g, '\n');
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(normalizedStr);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-  }
-  return Date.now().toString(16).toUpperCase();
+export async function calculateJsonHash(json: string): Promise<string> {
+  const bytes = new TextEncoder().encode(json.replace(/\r\n?/g, '\n'));
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+
+export function downloadLibraryJson(json: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

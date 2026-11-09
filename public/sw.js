@@ -1,5 +1,5 @@
 // Self-Destruct / Clean Service Worker to clear any stale cache on iOS / WebKit
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 

@@ -22,33 +22,41 @@ import { useSync } from '../context';
 
 interface XamlStatsPageProps {
   nodes: NodeData[];
-  onGoToRevision?: () => void;
 }
 
-export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevision }) => {
+export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes }) => {
   const { accessToken } = useSync();
   const [logs, setLogs] = useState<StudyLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [timeRange, setTimeRange] = useState<'7d' | '14d' | '30d' | 'all'>('14d');
 
-  const loadLogs = async () => {
-    setIsLoading(true);
-    try {
-      if (accessToken) {
-        await syncStudyStats(accessToken);
-      }
-      const data = await idbGetStudyLogs(500);
-      setLogs(data);
-    } catch (e) {
-      console.error('Failed to load study logs:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
-    loadLogs();
-  }, [accessToken]);
+    let cancelled = false;
+
+    async function loadLogs() {
+      try {
+        if (accessToken) {
+          await syncStudyStats(accessToken);
+        }
+        const data = await idbGetStudyLogs(500);
+        if (!cancelled) setLogs(data);
+      } catch (error) {
+        console.error('Failed to load study logs:', error);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void loadLogs();
+    return () => { cancelled = true; };
+  }, [accessToken, refreshCount]);
+
+  const handleRefresh = () => {
+    setIsLoading(true);
+    setRefreshCount((count) => count + 1);
+  };
 
   const handleClearHistory = async () => {
     if (confirm('Are you sure you want to clear all revision and study history logs? (Card weights and decks will remain intact)')) {
@@ -132,7 +140,7 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
     if (distinctDates.length === 0) return 0;
 
     let streak = 0;
-    let checkDate = new Date();
+    const checkDate = new Date();
 
     // If no reviews today yet, check if studied yesterday to keep streak alive
     const todayFormatted = checkDate.toISOString().slice(0, 10);
@@ -212,7 +220,7 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
 
         <div className="flex items-center space-x-2 shrink-0">
           <button
-            onClick={loadLogs}
+            onClick={handleRefresh}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition-colors flex items-center space-x-1.5"
             title="Refresh statistics"
           >
@@ -359,7 +367,7 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
             {/* Easy */}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-emerald-400 font-semibold">Easy (4)</span>
+                <span className="text-emerald-400 font-semibold">Excellent (4)</span>
                 <span className="text-slate-300 font-mono">
                   {difficultyCounts.easy} ({totalReviews > 0 ? Math.round((difficultyCounts.easy / totalReviews) * 100) : 0}%)
                 </span>
@@ -391,7 +399,7 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
             {/* Hard */}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-amber-400 font-semibold">Hard (2)</span>
+                <span className="text-amber-400 font-semibold">Bad (2)</span>
                 <span className="text-slate-300 font-mono">
                   {difficultyCounts.hard} ({totalReviews > 0 ? Math.round((difficultyCounts.hard / totalReviews) * 100) : 0}%)
                 </span>
@@ -407,7 +415,7 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
             {/* Again */}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-rose-400 font-semibold">Again (1)</span>
+                <span className="text-rose-400 font-semibold">Horrible (1)</span>
                 <span className="text-slate-300 font-mono">
                   {difficultyCounts.again} ({totalReviews > 0 ? Math.round((difficultyCounts.again / totalReviews) * 100) : 0}%)
                 </span>
@@ -504,9 +512,12 @@ export const XamlStatsPage: React.FC<XamlStatsPageProps> = ({ nodes, onGoToRevis
           <div className="divide-y divide-slate-800/60 max-h-80 overflow-y-auto pr-1">
             {logs.slice(0, 50).map((log) => {
               const diffColors: Record<string, string> = {
+                Horrible: 'bg-rose-950 text-rose-300 border-rose-500/40',
                 Again: 'bg-rose-950 text-rose-300 border-rose-500/40',
+                Bad: 'bg-amber-950 text-amber-300 border-amber-500/40',
                 Hard: 'bg-amber-950 text-amber-300 border-amber-500/40',
                 Good: 'bg-indigo-950 text-indigo-300 border-indigo-500/40',
+                Excellent: 'bg-emerald-950 text-emerald-300 border-emerald-500/40',
                 Easy: 'bg-emerald-950 text-emerald-300 border-emerald-500/40',
               };
 
