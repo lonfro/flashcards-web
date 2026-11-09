@@ -1,4 +1,7 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import { MenuItem, Textarea } from '@fluentui/react-components';
+import { Bold, Italic } from 'lucide-react';
+import { WinUIFlyout, type FlyoutAnchor } from './WinUIFlyout';
 
 interface MarkdownAnswerEditorProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -9,6 +12,12 @@ interface MarkdownAnswerEditorProps {
 
 export function MarkdownAnswerEditor({ textareaRef, value, onChange, onKeyDown }: MarkdownAnswerEditorProps) {
   const selection = useRef<[number, number]>([0, 0]);
+  const [anchor, setAnchor] = useState<FlyoutAnchor | null>(null);
+
+  function openMenu(editor: HTMLTextAreaElement, x: number, y: number) {
+    selection.current = [editor.selectionStart, editor.selectionEnd];
+    setAnchor({ x, y, source: editor });
+  }
 
   function toggle(marker: '*' | '**') {
     const editor = textareaRef.current;
@@ -33,41 +42,45 @@ export function MarkdownAnswerEditor({ textareaRef, value, onChange, onKeyDown }
   }
 
   return (
-    <div className="space-y-1 flex-1 min-h-0 flex flex-col">
-      <div className="flex items-center justify-between gap-2 shrink-0">
-        <label htmlFor="card-answer" className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-          Back (Answer / Markdown / LaTeX)
-        </label>
-        <div className="flex gap-1" aria-label="Markdown formatting">
-          <button type="button" title="Bold (Ctrl+B)" aria-label="Bold" onClick={() => toggle('**')}
-            className="px-2 py-1 rounded bg-slate-800 text-xs font-bold text-slate-200">B</button>
-          <button type="button" title="Italic (Ctrl+I)" aria-label="Italic" onClick={() => toggle('*')}
-            className="px-2 py-1 rounded bg-slate-800 text-xs italic text-slate-200">I</button>
-        </div>
-      </div>
-      <textarea
-        id="card-answer"
+    <>
+      <Textarea
         ref={textareaRef}
+        aria-label="Back (Answer / Markdown / LaTeX)"
+        className="winui-editor-answer"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onSelect={(event) => {
-          selection.current = [event.currentTarget.selectionStart, event.currentTarget.selectionEnd];
+        onChange={(_, data) => onChange(data.value)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          const editor = textareaRef.current;
+          if (editor) openMenu(editor, event.clientX, event.clientY);
         }}
         onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          const editor = textareaRef.current;
           const key = event.key.toLowerCase();
-          if ((event.ctrlKey || event.metaKey) && !event.altKey && (key === 'b' || key === 'i')) {
+          if (editor && (key === 'contextmenu' || (key === 'f10' && event.shiftKey))) {
+            event.preventDefault();
+            const { left, top } = editor.getBoundingClientRect();
+            openMenu(editor, left + 12, top + 24);
+            return;
+          }
+          if (editor && (event.ctrlKey || event.metaKey) && !event.altKey && (key === 'b' || key === 'i')) {
             event.preventDefault();
             if (!event.repeat) {
-              selection.current = [event.currentTarget.selectionStart, event.currentTarget.selectionEnd];
+              selection.current = [editor.selectionStart, editor.selectionEnd];
               toggle(key === 'b' ? '**' : '*');
             }
             return;
           }
           onKeyDown?.(event);
         }}
-        placeholder="Back answer in Markdown / LaTeX..."
-        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 sm:p-4 text-sm sm:text-lg font-mono text-slate-100 focus:outline-none focus:border-indigo-500 resize-none flex-1 min-h-0 overflow-y-auto leading-relaxed"
       />
-    </div>
+      {anchor && (
+        <WinUIFlyout anchor={anchor} label="Markdown formatting" onClose={() => setAnchor(null)}>
+          <MenuItem icon={<Bold />} onClick={() => toggle('**')}>Bold</MenuItem>
+          <MenuItem icon={<Italic />} onClick={() => toggle('*')}>Italic</MenuItem>
+        </WinUIFlyout>
+      )}
+    </>
   );
 }

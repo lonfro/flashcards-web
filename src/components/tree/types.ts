@@ -14,7 +14,7 @@ export interface XamlTreeViewProps {
   cardSettings: CardSettingsData;
   onSelectNode: (node: NodeData) => void;
   onAddCard: (parentId: string | null) => void;
-  onAddDivider: (parentId: string | null) => void;
+  onAddDivider: (parentId: string | null) => NodeData;
   onReviseDivider: (node: NodeData | null) => void;
   onEditCard: (node: NodeData) => void;
   onRenameNode: (node: NodeData, newName: string) => void;

@@ -21,7 +21,7 @@ export interface LibraryContextValue {
   selectedNode: NodeData | null;
   selectedCardNode: NodeData | null;
   addCardParentId: string | null;
-  revisionDividerId: string | null;
+  revisionDividerId: string | null | undefined;
   revisionDividerNode: NodeData | null;
   cardsToRevise: NodeData[];
   setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
@@ -33,7 +33,7 @@ export interface LibraryContextValue {
   handleSelectNode: (node: NodeData) => void;
   handleTriggerAddCard: (parentId: string | null) => void;
   handleSaveNewCard: (front: string, back: string) => void;
-  handleAddDivider: (parentId: string | null) => void;
+  handleAddDivider: (parentId: string | null) => NodeData;
   handleStartEditCard: (cardNode: NodeData) => void;
   handleSaveCardEdit: (front: string, back: string) => void;
   handleRenameNode: (node: NodeData, newName: string) => void;
@@ -66,15 +66,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     setEditingCardNode,
     setIsCardFlipped,
     editingCardNode,
+    rightViewMode,
   } = useNavigation();
 
   const { nodes, isLoading, saveNodes, setNodes } = useNodes();
   const backups = useLibraryBackups(nodes, isLoading);
   const latestNodes = useRef(nodes);
   useEffect(() => { latestNodes.current = nodes; }, [nodes]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setTreeSelection] = useState<string | null>(null);
+  const [viewedCardId, setViewedCardId] = useState<string | null>(null);
+  const setSelectedNodeId = useCallback((id: string | null) => {
+    setTreeSelection(id);
+    if (!id || latestNodes.current.some((node) => node.id === id && node.card)) {
+      setViewedCardId(id);
+    }
+  }, []);
   const [addCardParentId, setAddCardParentId] = useState<string | null>(null);
-  const [revisionDividerId, setRevisionDividerId] = useState<string | null>(null);
+  const [revisionDividerId, setRevisionDividerId] = useState<string | null | undefined>(undefined);
 
   const syncListenersRef = useRef<Set<(nodes: NodeData[]) => void>>(new Set());
 
@@ -158,11 +166,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     return nodes.find((n) => n.id === selectedNodeId) || null;
   }, [nodes, selectedNodeId]);
 
-  const selectedCardNode = useMemo(() => {
-    if (!selectedNode) return null;
-    if (selectedNode.type === 'card' && selectedNode.card) return selectedNode;
-    return null;
-  }, [selectedNode]);
+  const selectedCardNode = useMemo(
+    () => nodes.find((node) => node.id === viewedCardId && node.card) ?? null,
+    [nodes, viewedCardId]
+  );
 
   const revisionDividerNode = useMemo(() => {
     if (!revisionDividerId) return null;
@@ -170,20 +177,22 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [nodes, revisionDividerId]);
 
   const cardsToRevise = useMemo(() => {
-    return getAllCardsInDeck(nodes, revisionDividerId);
+    return revisionDividerId === undefined ? [] : getAllCardsInDeck(nodes, revisionDividerId);
   }, [nodes, revisionDividerId]);
 
   // TreeView Item Selection
   const handleSelectNode = useCallback(
     (node: NodeData) => {
       setSelectedNodeId(node.id);
+      if (node.type === 'divider') {
+        if (rightViewMode === 'CardAddView') setAddCardParentId(node.id);
+        return;
+      }
       setIsCardFlipped(false);
       setRightViewMode('CardView');
-      if (node.type === 'card') {
-        setMobileView('card');
-      }
+      setMobileView('card');
     },
-    [setIsCardFlipped, setRightViewMode, setMobileView]
+    [rightViewMode, setSelectedNodeId, setIsCardFlipped, setRightViewMode, setMobileView]
   );
 
   // Trigger Add Card mode
@@ -192,9 +201,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setAddCardParentId(parentId);
       if (parentId) setSelectedNodeId(parentId);
       setRightViewMode('CardAddView');
+      setIsCardFlipped(false);
       setMobileView('card');
     },
-    [setRightViewMode, setMobileView]
+    [setSelectedNodeId, setIsCardFlipped, setRightViewMode, setMobileView]
   );
 
   // Save new card
@@ -231,7 +241,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setSelectedNodeId(newId);
       setMobileView('card');
     },
-    [addCardParentId, selectedNode, cardSettings.defaultWeight, handleUpdateNodes, setMobileView]
+    [addCardParentId, selectedNode, cardSettings.defaultWeight, handleUpdateNodes, setSelectedNodeId, setMobileView]
   );
 
   const handleAddDivider = useCallback(
@@ -246,7 +256,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
       const newDividerNode: NodeData = {
         id: newId,
-        name: 'New Divider',
+        name: 'New divider',
         type: 'divider',
         parentId: targetParent,
         createdAt: new Date().toISOString(),
@@ -260,8 +270,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
       handleUpdateNodes([...nodes, newDividerNode]);
       setSelectedNodeId(newId);
+      return newDividerNode;
     },
-    [selectedNode, handleUpdateNodes, nodes]
+    [selectedNode, handleUpdateNodes, nodes, setSelectedNodeId]
   );
 
   const handleStartEditCard = useCallback(
@@ -324,7 +335,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         setMobileView('tree');
       }
     },
-    [nodes, handleUpdateNodes, selectedNodeId, setMobileView]
+    [nodes, handleUpdateNodes, selectedNodeId, setSelectedNodeId, setMobileView]
   );
 
   const handleResetWeights = useCallback((nodeId: string | null, recursive = true) => {
@@ -395,7 +406,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setSelectedNodeId(null);
       setMobileView('tree');
     }
-  }, [handleUpdateNodes, setMobileView]);
+  }, [handleUpdateNodes, setSelectedNodeId, setMobileView]);
 
   const handleMoveNode = useCallback(
     (draggedNodeId: string, targetNodeId: string | null, dropPosition?: 'before' | 'after' | 'into') => {

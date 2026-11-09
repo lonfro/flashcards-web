@@ -4,19 +4,19 @@ export const PRESET_THEMES: AppTheme[] = [
   {
     id: 'winui-dark',
     name: 'WinUI 3 Dark (Default)',
-    background: '#020617',
-    surface: '#0f172a',
-    cardBg: '#0f172a',
-    border: '#1e293b',
-    foreground: '#f8fafc',
-    foregroundMuted: '#94a3b8',
-    accent: '#6366f1',
-    accentHover: '#4f46e5',
-    accentText: '#ffffff',
-    folderIconColor: '#f59e0b',
-    cardIconColor: '#818cf8',
-    scrollbarThumb: '#334155',
-    scrollbarTrack: '#090d16',
+    background: '#202020',
+    surface: '#272727',
+    cardBg: '#2c2c2c',
+    border: '#3d3d3d',
+    foreground: '#ffffff',
+    foregroundMuted: '#c5c5c5',
+    accent: '#60cdff',
+    accentHover: '#78d5ff',
+    accentText: '#00334d',
+    folderIconColor: '#e4e4e4',
+    cardIconColor: '#e4e4e4',
+    scrollbarThumb: '#686868',
+    scrollbarTrack: '#202020',
   },
   {
     id: 'amoled-black',
@@ -72,19 +72,19 @@ export const PRESET_THEMES: AppTheme[] = [
   {
     id: 'mica-light',
     name: 'Mica Light',
-    background: '#f8fafc',
-    surface: '#ffffff',
-    cardBg: '#ffffff',
-    border: '#e2e8f0',
-    foreground: '#0f172a',
-    foregroundMuted: '#64748b',
-    accent: '#2563eb',
-    accentHover: '#1d4ed8',
+    background: '#f3f3f3',
+    surface: '#f9f9f9',
+    cardBg: '#fbfbfb',
+    border: '#dedede',
+    foreground: '#1a1a1a',
+    foregroundMuted: '#595959',
+    accent: '#005fb8',
+    accentHover: '#196ebc',
     accentText: '#ffffff',
-    folderIconColor: '#d97706',
-    cardIconColor: '#2563eb',
-    scrollbarThumb: '#cbd5e1',
-    scrollbarTrack: '#f1f5f9',
+    folderIconColor: '#292929',
+    cardIconColor: '#292929',
+    scrollbarThumb: '#909090',
+    scrollbarTrack: '#f3f3f3',
   },
   {
     id: 'dracula-purple',
@@ -162,6 +162,11 @@ export function applyTheme(theme: AppTheme): void {
   if (typeof window === 'undefined') return;
 
   const root = document.documentElement;
+  const color = theme.background.slice(1);
+  const red = Number.parseInt(color.slice(0, 2), 16);
+  const green = Number.parseInt(color.slice(2, 4), 16);
+  const blue = Number.parseInt(color.slice(4, 6), 16);
+  root.dataset.winuiLight = String(red * 0.299 + green * 0.587 + blue * 0.114 > 155);
   root.style.setProperty('--bg-main', theme.background);
   root.style.setProperty('--bg-surface', theme.surface);
   root.style.setProperty('--bg-card', theme.cardBg);
@@ -188,7 +193,8 @@ export function getStoredTheme(): AppTheme {
   try {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const stored: AppTheme = JSON.parse(raw);
+      return stored.isCustom ? stored : (PRESET_THEMES.find((preset) => preset.id === stored.id) ?? stored);
     }
   } catch (e) {
     console.error('Failed to load theme:', e);

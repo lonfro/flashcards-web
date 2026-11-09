@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# Local Windows reference checkout
+/Flashcards/
+
 # next.js
 /.next/
 /out/

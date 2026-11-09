@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
+import React from 'react';
+import { Button } from '@fluentui/react-components';
 import {
   Folder,
   FolderOpen,
@@ -13,14 +13,11 @@ import {
 import { CardSettingsData } from '../../types/cardSettings';
 import { TreeNode } from './types';
 import { NodeData } from '../../types/flashcard';
-import { TreeNodeContextMenu } from './TreeNodeContextMenu';
+import type { FlyoutAnchor } from '../WinUIFlyout';
 
 interface TreeNodeItemProps {
   node: TreeNode;
   cardSettings: CardSettingsData;
-  onToggleProgress: (nodeId: string) => void;
-  onOpenImport: (nodeId: string, mode: 'divider' | 'contents') => void;
-  onSortNodes: (recursive: boolean, parentId: string) => void;
   depth?: number;
   selectedNodeId: string | null;
   expandedFolderIds: Record<string, boolean>;
@@ -34,27 +31,17 @@ interface TreeNodeItemProps {
   onSaveRename: (node: NodeData) => void;
   onCancelRename: () => void;
   onEditingNameChange: (val: string) => void;
-  onOpenMenu: (nodeId: string) => void;
+  onOpenMenu: (node: TreeNode, anchor: FlyoutAnchor) => void;
   onCloseMenu: () => void;
   onDragStart: (e: React.DragEvent, node: NodeData) => void;
   onDragOver: (e: React.DragEvent, nodeId: string, isFolder: boolean) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, nodeId: string, isFolder: boolean) => void;
-  onAddCard: (parentId: string | null) => void;
-  onAddDivider: (parentId: string | null) => void;
-  onReviseDivider: (node: NodeData | null) => void;
-  onEditCard: (node: NodeData) => void;
-  onDeleteNode: (nodeId: string) => void;
-  onResetWeights: (nodeId: string, recursive?: boolean) => void;
-  onExportDivider: (dividerId: string) => void;
 }
 
 export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   node,
   cardSettings,
-  onToggleProgress,
-  onOpenImport,
-  onSortNodes,
   depth = 0,
   selectedNodeId,
   expandedFolderIds,
@@ -74,29 +61,12 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
   onDragOver,
   onDragLeave,
   onDrop,
-  onAddCard,
-  onAddDivider,
-  onReviseDivider,
-  onEditCard,
-  onDeleteNode,
-  onResetWeights,
-  onExportDivider,
 }) => {
   const isFolder = node.type === 'divider';
   const isExpanded = !!expandedFolderIds[node.id];
   const isSelected = selectedNodeId === node.id;
   const isEditing = editingNodeId === node.id;
   const isMenuOpen = activeMenuNodeId === node.id;
-
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const openMenu = (x: number, y: number) => {
-    const height = Math.min(window.innerHeight * 0.6, 490);
-    setMenuPosition({
-      x: Math.max(8, Math.min(x, window.innerWidth - 232)),
-      y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
-    });
-    onOpenMenu(node.id);
-  };
 
   const difference = cardSettings.maximumWeight - cardSettings.minimumWeight;
   const buffer = difference / 10;
@@ -118,6 +88,7 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
       )}
 
       <div
+        tabIndex={isSelected || depth === 0 ? 0 : -1}
         draggable={!isEditing}
         onDragStart={(e) => onDragStart(e, node)}
         onDragOver={(e) => onDragOver(e, node.id, isFolder)}
@@ -128,23 +99,34 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
           if (isFolder) onToggleFolder(node.id);
         }}
         onContextMenu={(e) => {
+          if (isEditing && e.target instanceof HTMLInputElement) return;
           e.preventDefault();
           e.stopPropagation();
-          openMenu(e.clientX, e.clientY);
+          onOpenMenu(node, { x: e.clientX, y: e.clientY, source: e.currentTarget });
+        }}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+            event.preventDefault();
+            const { left, bottom } = event.currentTarget.getBoundingClientRect();
+            onOpenMenu(node, { x: left + 24, y: bottom, source: event.currentTarget });
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            onSelectNode(node);
+            if (isFolder) onToggleFolder(node.id);
+          }
         }}
         style={{
-          paddingLeft: `${Math.max(8, depth * 14 + 6)}px`,
+          paddingLeft: `${depth * 16 + 4}px`,
           backgroundImage: showProgress ? `linear-gradient(to right, ${fill} ${progress * 100}%, transparent ${progress * 100}%)` : undefined,
         }}
         title={showProgress ? `Deck progress: ${Math.round(progress * 100)}%` : undefined}
-        className={`flex items-center justify-between h-9 sm:h-8 pr-2 rounded-md text-xs cursor-pointer transition-colors select-none relative shrink-0 ${
-          isSelected
-            ? 'bg-slate-800 text-indigo-300 font-semibold border-l-2 border-indigo-500 shadow-sm'
-            : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-        } ${isDropInto ? 'bg-indigo-950/80 ring-1 ring-indigo-500' : ''}`}
+        className="winui-tree-row"
+        data-selected={isSelected}
+        data-drop-into={isDropInto}
       >
         {/* Left item details: Chevron + Icon + Title */}
-        <div className="flex items-center space-x-1.5 flex-1 min-w-0 pr-1 h-full">
+        <div className="flex items-center gap-2 flex-1 min-w-0 pr-1 h-full">
           {isFolder ? (
             <button
               type="button"
@@ -152,28 +134,31 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
                 e.stopPropagation();
                 onToggleFolder(node.id);
               }}
-              className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-200 rounded shrink-0 touch-manipulation"
+              className="winui-tree-chevron"
+              aria-label={isExpanded ? 'Collapse divider' : 'Expand divider'}
+              aria-expanded={isExpanded}
             >
-              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </button>
           ) : (
-            <span className="w-5 h-5 shrink-0" />
+            <span className="w-4 h-5 shrink-0" />
           )}
 
           {isFolder ? (
             isExpanded ? (
-              <FolderOpen size={15} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} className="shrink-0" />
+              <FolderOpen size={18} strokeWidth={1.5} style={{ color: 'var(--color-folder-icon, currentColor)' }} className="shrink-0" />
             ) : (
-              <Folder size={15} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} className="shrink-0" />
+              <Folder size={18} strokeWidth={1.5} style={{ color: 'var(--color-folder-icon, currentColor)' }} className="shrink-0" />
             )
           ) : (
-            <FileText size={15} style={{ color: 'var(--color-card-icon, #818cf8)' }} className="shrink-0" />
+            <FileText size={18} strokeWidth={1.5} style={{ color: 'var(--color-card-icon, currentColor)' }} className="shrink-0" />
           )}
 
           {isEditing ? (
             <input
               type="text"
               autoFocus
+              onFocus={(event) => event.currentTarget.select()}
               value={editingName}
               onChange={(e) => onEditingNameChange(e.target.value)}
               onBlur={() => onSaveRename(node)}
@@ -182,38 +167,40 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
                 if (e.key === 'Enter') onSaveRename(node);
                 if (e.key === 'Escape') onCancelRename();
               }}
-              className="bg-slate-950 border border-indigo-500 px-1.5 py-0.5 rounded text-xs text-slate-100 w-full focus:outline-none"
+              className="winui-textbox w-full px-1.5"
             />
           ) : (
-            <span className="truncate text-xs sm:text-[13px] leading-normal py-0.5">{node.name}</span>
+            <span className="truncate leading-normal">{node.card?.front || node.name}</span>
           )}
         </div>
 
         {/* Right badge & context menu toggle button */}
         <div className="flex items-center space-x-1 shrink-0 ml-1">
-          {isFolder && node.cardCount > 0 && (
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800">
+          {isFolder && (
+            <span className="winui-tree-count">
               {node.cardCount}
             </span>
           )}
 
           {/* Context Flyout trigger (mobile) */}
-          <button
-            type="button"
+          <Button
+            appearance="subtle"
+            size="small"
+            icon={<MoreVertical size={16} />}
             onClick={(e) => {
               e.stopPropagation();
               if (isMenuOpen) {
                 onCloseMenu();
               } else {
                 const { left, bottom } = e.currentTarget.getBoundingClientRect();
-                openMenu(left, bottom);
+                onOpenMenu(node, { x: left, y: bottom, source: e.currentTarget });
               }
             }}
-            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 opacity-80 md:hidden transition-opacity touch-manipulation"
-            title="Item menu"
-          >
-            <MoreVertical size={14} />
-          </button>
+            className="winui-tree-menu-button"
+            aria-label="Item menu"
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+          />
         </div>
       </div>
 
@@ -222,38 +209,14 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
         <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-400 rounded-full z-10 pointer-events-none" />
       )}
 
-      {/* Context Menu Flyout */}
-      {isMenuOpen && createPortal(
-        <TreeNodeContextMenu
-          node={node}
-          position={menuPosition}
-          onClose={onCloseMenu}
-          onAddCard={onAddCard}
-          onAddDivider={onAddDivider}
-          onReviseDivider={onReviseDivider}
-          onEditCard={onEditCard}
-          onStartRename={onStartRename}
-          onDeleteNode={onDeleteNode}
-          onResetWeights={onResetWeights}
-          onExportDivider={onExportDivider}
-          onToggleProgress={onToggleProgress}
-          onOpenImport={onOpenImport}
-          onSortNodes={onSortNodes}
-        />,
-        document.body
-      )}
-
       {/* Render Folder Children */}
       {isFolder && isExpanded && node.childrenNodes.length > 0 && (
-        <div className="border-l border-slate-800 ml-3.5 my-0.5">
+        <div>
           {node.childrenNodes.map((child) => (
             <TreeNodeItem
               key={child.id}
               node={child}
               cardSettings={cardSettings}
-              onToggleProgress={onToggleProgress}
-              onOpenImport={onOpenImport}
-              onSortNodes={onSortNodes}
               depth={depth + 1}
               selectedNodeId={selectedNodeId}
               expandedFolderIds={expandedFolderIds}
@@ -273,13 +236,6 @@ export const TreeNodeItem: React.FC<TreeNodeItemProps> = ({
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
-              onAddCard={onAddCard}
-              onAddDivider={onAddDivider}
-              onReviseDivider={onReviseDivider}
-              onEditCard={onEditCard}
-              onDeleteNode={onDeleteNode}
-              onResetWeights={onResetWeights}
-              onExportDivider={onExportDivider}
             />
           ))}
         </div>

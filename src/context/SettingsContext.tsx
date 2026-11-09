@@ -14,6 +14,9 @@ const AUTO_REFRESH_ENABLED_KEY = 'flashcards_web_auto_refresh_enabled_v1';
 const AUTO_REFRESH_INTERVAL_KEY = 'flashcards_web_auto_refresh_interval_v1';
 const CARD_SETTINGS_KEY = 'flashcards_web_card_settings_v1';
 const DIFFICULTY_SETTINGS_KEY = 'flashcards_web_difficulty_settings_v1';
+const UI_SETTINGS_KEY = 'flashcards_web_ui_settings_v1';
+const DEFAULT_UI_SETTINGS = { maxCardWidth: 550, showTooltips: true };
+type UISettings = typeof DEFAULT_UI_SETTINGS;
 
 export interface SettingsContextValue {
   sidebarWidth: number;
@@ -21,6 +24,8 @@ export interface SettingsContextValue {
   autoRefreshInterval: number;
   cardSettings: CardSettingsData;
   difficultySettings: DifficultySettingsData;
+  uiSettings: UISettings;
+  updateUISettings: (settings: UISettings) => void;
   setSidebarWidth: (w: number) => void;
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setAutoRefreshInterval: (seconds: number) => void;
@@ -50,6 +55,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(30);
   const [cardSettings, setCardSettings] = useState<CardSettingsData>(DEFAULT_CARD_SETTINGS);
+  const [uiSettings, setUISettings] = useState(DEFAULT_UI_SETTINGS);
   const [difficultySettings, setDifficultySettings] = useState<DifficultySettingsData>(DEFAULT_DIFFICULTY_SETTINGS);
 
   useEffect(() => {
@@ -64,6 +70,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const frame = window.requestAnimationFrame(() => {
       // Load persisted settings
       try {
+        const savedUISettings = localStorage.getItem(UI_SETTINGS_KEY);
+        if (savedUISettings) {
+          setUISettings({ ...DEFAULT_UI_SETTINGS, ...JSON.parse(savedUISettings) });
+        }
+
         const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
         if (savedWidth) {
           setSidebarWidth(parseInt(savedWidth, 10));
@@ -94,6 +105,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
+
+  const updateUISettings = (settings: UISettings) => {
+    setUISettings(settings);
+    try {
+      localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      console.error('Failed to save UI settings:', error);
+    }
+  };
 
   const handleSidebarWidthChange = (newWidth: number) => {
     setSidebarWidth(newWidth);
@@ -166,6 +186,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         autoRefreshInterval,
         cardSettings,
         difficultySettings,
+        uiSettings,
+        updateUISettings,
         setSidebarWidth,
         setAutoRefreshEnabled,
         setAutoRefreshInterval,

@@ -1,0 +1,776 @@
+:root {
+  --winui-font: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --winui-control: color-mix(in srgb, var(--bg-main), var(--text-main) 6%);
+  --winui-hover: color-mix(in srgb, var(--bg-main), var(--text-main) 10%);
+  --winui-pressed: color-mix(in srgb, var(--bg-main), var(--text-main) 6%);
+  --winui-stroke: color-mix(in srgb, var(--bg-main), var(--text-main) 12%);
+  --winui-bottom-stroke: color-mix(in srgb, var(--bg-main), var(--text-main) 34%);
+  --winui-disabled: color-mix(in srgb, var(--bg-main), var(--text-main) 38%);
+  --winui-flyout-fill: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  --winui-danger: light-dark(#c42b1c, #ff99a4);
+  --winui-inset: 36px;
+  color-scheme: dark;
+}
+
+:root[data-winui-light="true"] {
+  color-scheme: light;
+}
+
+.winui-provider.fui-FluentProvider:not([data-portal-node]) {
+  height: 100%;
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--winui-font);
+}
+
+.winui-editor-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  padding: var(--winui-inset);
+}
+
+.winui-editor {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: var(--winui-inset);
+  border: 1px solid var(--border-main);
+  border-radius: 8px;
+  background: var(--bg-card);
+  box-shadow: 0 8px 24px #0003, 0 2px 5px #0002;
+}
+
+.winui-textbox,
+.winui-editor .fui-Textarea {
+  color: var(--text-main);
+  background: var(--winui-control);
+  border: 1px solid var(--winui-stroke);
+  border-bottom-color: var(--winui-bottom-stroke);
+  border-radius: 4px;
+  outline: none;
+}
+
+.winui-textbox:focus,
+.winui-editor .fui-Textarea:focus-within {
+  background: var(--bg-main);
+  border-bottom-color: var(--accent-main);
+}
+
+.winui-textbox:focus {
+  box-shadow: inset 0 -1px var(--accent-main);
+}
+
+.winui-editor .fui-Textarea {
+  width: 100%;
+  min-height: 0;
+}
+
+.winui-editor .fui-Textarea textarea {
+  resize: none;
+  min-height: 0;
+  padding: 5px 11px;
+  overflow-y: auto;
+  color: var(--text-main);
+  font: inherit;
+  user-select: text;
+}
+
+.winui-editor .winui-editor-front {
+  font-size: 28px;
+  line-height: 1.35;
+}
+
+.winui-editor-front textarea {
+  field-sizing: content;
+  max-height: 5lh;
+}
+
+.winui-editor .winui-editor-answer {
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.winui-editor-answer textarea {
+  flex: 1;
+}
+
+.winui-editor-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.winui-editor-path, .winui-editor-actions {
+  display: flex;
+  align-items: center;
+}
+
+.winui-editor-path {
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+.winui-editor-path svg {
+  flex-shrink: 0;
+}
+
+.winui-editor-path span {
+  overflow-wrap: anywhere;
+}
+
+.winui-editor-actions {
+  gap: 18px;
+}
+
+.winui-editor .winui-button {
+  min-height: 40px;
+  padding-inline: 12px;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.winui-editor .winui-button span {
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.winui-flyout.fui-MenuPopover {
+  padding: 4px;
+  min-width: 160px;
+  max-width: min(360px, calc(100dvw - 12px));
+  border: 1px solid var(--winui-stroke);
+  border-radius: 8px;
+  background: var(--winui-flyout-fill);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 24px #0005, 0 2px 4px #0003;
+}
+
+.winui-flyout [role^="menuitem"] {
+  max-width: none;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 8px;
+  background: transparent;
+  font-size: 14px;
+}
+
+.winui-flyout [role^="menuitem"]:hover,
+.winui-flyout [role^="menuitem"][aria-expanded="true"] {
+  background: var(--winui-hover);
+}
+
+.winui-flyout [role^="menuitem"]:active {
+  background: var(--winui-pressed);
+}
+
+.winui-flyout .winui-danger,
+.winui-flyout .winui-danger:hover,
+.winui-flyout .winui-danger .fui-MenuItem__icon {
+  color: var(--winui-danger);
+}
+
+.winui-flyout [role^="menuitem"] svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
+}
+
+.winui-flyout [role="separator"] {
+  margin-block: 4px;
+  border-color: var(--border-main);
+}
+
+.winui-tree-pane {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex-shrink: 0;
+  width: var(--sidebar-width);
+  height: 100%;
+  background: var(--bg-main);
+}
+
+.winui-tree-search {
+  padding: 6px 8px;
+}
+
+.winui-tree-search input {
+  width: 100%;
+  height: 25px;
+  padding: 0 7px;
+  font-size: 14px;
+}
+
+.winui-tree-viewport {
+  flex: 1;
+  min-height: 0;
+  padding: 0 4px 48px 2px;
+  overflow-y: auto;
+  outline: none;
+  touch-action: pan-y;
+}
+
+.winui-tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding-right: 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--text-main);
+  cursor: default;
+}
+
+.winui-tree-row:hover, .winui-tree-row[data-selected="true"] {
+  background-color: var(--winui-hover);
+}
+
+.winui-tree-row[data-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--accent-main);
+}
+
+.winui-tree-row[data-drop-into="true"] {
+  outline: 1px solid var(--accent-main);
+  outline-offset: -1px;
+}
+
+.winui-tree-chevron {
+  display: grid;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 26px;
+  place-items: center;
+}
+
+.winui-tree-count {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.winui-tree-row .winui-tree-menu-button {
+  display: none;
+}
+
+.winui-empty-state {
+  display: grid;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  place-content: center;
+  padding: 16px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+@media (max-width: 767px), (max-height: 500px) {
+  :root {
+    --winui-inset: 12px;
+  }
+
+  .winui-editor-actions {
+    gap: 8px;
+  }
+
+  .winui-editor .winui-editor-front {
+    font-size: 22px;
+  }
+
+  .winui-editor .winui-editor-answer,
+  .winui-editor .winui-button {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .winui-tree-row .winui-tree-menu-button {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .winui-tree-pane {
+    width: 100%;
+  }
+
+  .winui-tree-row {
+    min-height: 36px;
+  }
+}
+
+.winui-window {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  user-select: none;
+  background: var(--bg-main);
+}
+
+.winui-title-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.winui-title-bar .winui-title-back {
+  width: 48px;
+  min-width: 48px;
+  min-height: 32px;
+  border-radius: 0;
+}
+
+.winui-title-bar .winui-sync-status {
+  margin: 0 6px 0 auto;
+}
+
+.winui-workspace, .winui-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.winui-content {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-main);
+  border-top: 1px solid var(--winui-stroke);
+  border-left: 1px solid var(--winui-stroke);
+  border-top-left-radius: 8px;
+}
+
+.winui-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  width: 48px;
+  padding: 4px;
+}
+
+.winui-navigation[data-expanded="true"] {
+  width: 220px;
+}
+
+.winui-navigation .fui-Button {
+  min-width: 40px;
+  min-height: 36px;
+  padding-inline: 10px;
+  color: var(--text-main);
+}
+
+.winui-navigation .winui-navigation-toggle {
+  align-self: flex-start;
+}
+
+.winui-navigation .winui-nav-item {
+  position: relative;
+  justify-content: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.winui-navigation .winui-nav-item[aria-current="page"] {
+  background: var(--winui-hover);
+}
+
+.winui-navigation .winui-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: var(--accent-main);
+}
+
+.winui-navigation[data-expanded="false"] .winui-nav-item > span:not(.fui-Button__icon),
+.winui-navigation .winui-mobile-view-button {
+  display: none;
+}
+
+.winui-navigation .winui-nav-item[aria-label="Settings"] {
+  margin-top: auto;
+}
+
+.winui-splitter {
+  width: 4px;
+  height: 100%;
+  position: relative;
+  z-index: 15;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--winui-stroke);
+}
+
+.winui-splitter:hover, .winui-splitter[data-resizing="true"] {
+  background: var(--winui-bottom-stroke);
+}
+
+@media (max-width: 767px) {
+  .winui-workspace {
+    flex-direction: column;
+  }
+
+  .winui-content {
+    border-left: 0;
+    border-top-left-radius: 0;
+  }
+
+  .winui-navigation, .winui-navigation[data-expanded="true"] {
+    width: 100%;
+    flex-direction: row;
+    gap: 2px;
+  }
+
+  .winui-navigation .winui-navigation-toggle {
+    display: none;
+  }
+
+  .winui-navigation .winui-nav-item[aria-label="Settings"] {
+    margin: 0 0 0 auto;
+  }
+
+  .winui-navigation .winui-mobile-view-button {
+    display: inline-flex;
+  }
+}
+
+.winui-card-view, .winui-revision {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.winui-card-view {
+  padding: 16px;
+}
+
+.winui-card-header {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-height: 38px;
+}
+
+.winui-card-progress {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  width: 150px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.winui-card-progress .fui-ProgressBar {
+  height: 4px;
+  background: var(--winui-stroke);
+}
+
+.winui-card-actions {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.winui-card-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  margin-bottom: 38px;
+  overflow: hidden;
+  container-type: size;
+}
+
+.winui-flashcard {
+  display: grid;
+  place-items: center;
+  width: min(100% - 16px, (100cqh - 16px) * 550 / 325);
+  aspect-ratio: 550 / 325;
+  overflow: hidden;
+  padding: 25px;
+  border: 1px solid var(--border-main);
+  border-radius: 8px;
+  background: var(--bg-card);
+  box-shadow: 0 8px 24px #0003, 0 2px 5px #0002;
+  cursor: pointer;
+}
+
+.winui-flashcard[data-flipped="true"] {
+  background: var(--bg-surface);
+}
+
+.winui-flashcard:focus-visible {
+  outline: 2px solid var(--accent-main);
+  outline-offset: -2px;
+}
+
+.winui-card-markdown {
+  text-align: center;
+  line-height: 1.25;
+}
+
+.winui-card-markdown p {
+  margin: 0.4em 0;
+  line-height: inherit;
+}
+
+.winui-revision-message {
+  gap: 8px;
+}
+
+.winui-revision-message p {
+  max-width: 400px;
+  font-size: 16px;
+}
+
+.winui-revision-ratings {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 0 36px 16px;
+}
+
+.winui-revision-ratings .fui-Button {
+  display: flex;
+  flex-direction: column;
+  min-height: 50px;
+  padding: 4px 16px;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
+.winui-revision-ratings .fui-Button span {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+@media (max-width: 767px) {
+  .winui-card-view {
+    padding: 8px;
+  }
+
+  .winui-card-stage {
+    margin-bottom: 10px;
+  }
+
+  .winui-revision-ratings {
+    gap: 8px;
+    margin-inline: 8px;
+  }
+
+  .winui-revision-ratings .fui-Button {
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: 16px;
+  }
+}
+
+.winui-tree-search .winui-search-control {
+  width: 100%;
+  min-height: 25px;
+  height: 25px;
+  border-color: var(--winui-stroke);
+  border-radius: 5px;
+  background: var(--winui-control);
+}
+
+.winui-tree-search .winui-search-control input {
+  height: auto;
+  padding: 0 7px;
+}
+
+.winui-navigation[data-expanded="false"] .fui-Button__icon {
+  margin: 0;
+}
+
+.winui-settings {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 24px;
+}
+
+.winui-settings > header {
+  width: min(100% - 72px, 1064px);
+  margin: 0 auto 8px;
+}
+
+.winui-settings > header h1 {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.winui-settings-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 36px 36px;
+}
+
+.winui-settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 1064px;
+  margin-inline: auto;
+}
+
+.winui-settings-sections > h2 {
+  margin: 16px 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.winui-setting-row, .winui-settings-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-main);
+  border-radius: 6px;
+}
+
+.winui-settings-panel {
+  padding: 16px;
+}
+
+.winui-setting-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 12px 16px;
+}
+
+.winui-setting-row p {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.winui-setting-row .fui-SpinButton {
+  width: 112px;
+}
+
+@media (max-width: 767px) {
+  .winui-settings {
+    padding-top: 12px;
+  }
+
+  .winui-settings > header {
+    width: calc(100% - 32px);
+  }
+
+  .winui-settings-scroll {
+    padding: 0 16px 24px;
+  }
+}
+
+.winui-settings-expanders {
+  display: grid;
+  gap: 4px;
+}
+
+.winui-settings-expanders .fui-AccordionItem {
+  border: 1px solid var(--border-main);
+  border-radius: 6px;
+  background: var(--bg-card);
+}
+
+.winui-settings-expanders .fui-AccordionHeader button {
+  min-height: 68px;
+  padding-inline: 16px;
+  color: var(--text-main);
+  text-align: left;
+  font-weight: 400;
+}
+
+.winui-settings-expanders .fui-AccordionPanel {
+  margin: 0;
+}
+
+.winui-expander-row,
+.winui-expander-reset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-main);
+}
+
+.winui-expander-reset {
+  justify-content: flex-end;
+}
+
+.winui-settings-expanders p,
+.winui-duration-input span,
+.winui-rating-settings span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.winui-duration-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.winui-rating-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.winui-duration-input span,
+.winui-rating-settings > div > span {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.winui-expander-row .fui-SpinButton {
+  width: 100px;
+}
+
+.winui-duration-input .fui-SpinButton,
+.winui-expander-row .winui-duration-input .fui-SpinButton {
+  width: 74px;
+}

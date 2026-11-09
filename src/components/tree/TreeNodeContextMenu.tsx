@@ -1,237 +1,97 @@
 'use client';
 
-import React from 'react';
 import {
-  FilePlus,
-  FolderPlus,
-  RefreshCw,
-  RotateCcw,
-  Edit,
-  Trash,
-  Download,
-  Upload,
-  ArrowUpDown,
-} from 'lucide-react';
-import { TreeNode } from './types';
-import { NodeData } from '../../types/flashcard';
+  Menu, MenuDivider, MenuItem, MenuItemCheckbox, MenuList, MenuPopover, MenuTrigger,
+} from '@fluentui/react-components';
+import { ArrowDownToLine, ArrowUpFromLine, ArrowDownAZ, ChartNoAxesCombined, Folder, Pencil, Plus, RefreshCw, Shuffle, Trash2, Undo2 } from 'lucide-react';
+import type { ReactElement, ReactNode } from 'react';
+import type { TreeNode, XamlTreeViewProps } from './types';
+import { WinUIFlyout, type FlyoutAnchor } from '../WinUIFlyout';
 
-interface TreeNodeContextMenuProps {
-  node: TreeNode;
-  position: { x: number; y: number };
+interface TreeNodeContextMenuProps extends Pick<XamlTreeViewProps,
+  'onAddCard' | 'onReviseDivider' | 'onEditCard' | 'onDeleteNode' |
+  'onResetWeights' | 'onToggleProgress' | 'onSortNodes' | 'onExportDivider'
+> {
+  node: TreeNode | null;
+  anchor: FlyoutAnchor;
   onClose: () => void;
-  onAddCard: (parentId: string | null) => void;
   onAddDivider: (parentId: string | null) => void;
-  onReviseDivider: (node: NodeData | null) => void;
-  onEditCard: (node: NodeData) => void;
-  onStartRename: (node: NodeData) => void;
-  onDeleteNode: (nodeId: string) => void;
-  onResetWeights: (nodeId: string, recursive?: boolean) => void;
-  onToggleProgress: (nodeId: string) => void;
-  onOpenImport: (nodeId: string, mode: 'divider' | 'contents') => void;
-  onSortNodes: (recursive: boolean, parentId: string) => void;
-  onExportDivider: (dividerId: string) => void;
+  onStartRename: (node: TreeNode) => void;
+  onOpenImport: (nodeId: string | null, mode: 'divider' | 'contents') => void;
 }
 
-export const TreeNodeContextMenu: React.FC<TreeNodeContextMenuProps> = ({
-  node,
-  position,
-  onClose,
-  onAddCard,
-  onAddDivider,
-  onReviseDivider,
-  onEditCard,
-  onStartRename,
-  onDeleteNode,
-  onResetWeights,
-  onExportDivider,
-  onToggleProgress,
-  onOpenImport,
-  onSortNodes,
-}) => {
-  const isFolder = node.type === 'divider';
+function Submenu({ label, icon, children }: { label: string; icon: ReactElement; children: ReactNode }) {
+  return (
+    <Menu hasIcons hoverDelay={200} positioning={{ overflowBoundaryPadding: 6 }}>
+      <MenuTrigger disableButtonEnhancement>
+        <MenuItem icon={icon}>{label}</MenuItem>
+      </MenuTrigger>
+      <MenuPopover className="winui-flyout">
+        <MenuList aria-label={label}>{children}</MenuList>
+      </MenuPopover>
+    </Menu>
+  );
+}
+
+export function TreeNodeContextMenu({
+  node, anchor, onClose, onAddCard, onAddDivider, onReviseDivider, onEditCard, onStartRename,
+  onDeleteNode, onResetWeights, onToggleProgress, onOpenImport, onSortNodes, onExportDivider,
+}: TreeNodeContextMenuProps) {
+  const id = node?.id ?? null;
+
+  if (node?.type === 'card') {
+    return (
+      <WinUIFlyout anchor={anchor} label="Card actions" onClose={onClose}>
+        <MenuItem icon={<Pencil />} onClick={() => onEditCard(node)}>Edit card</MenuItem>
+        <MenuItem icon={<Pencil />} onClick={() => onStartRename(node)}>Rename card</MenuItem>
+        <MenuItem icon={<Undo2 />} onClick={() => onResetWeights(node.id, false)}>Reset card weight</MenuItem>
+        <MenuItem className="winui-danger" icon={<Trash2 />} onClick={() => onDeleteNode(node.id)}>Delete card</MenuItem>
+      </WinUIFlyout>
+    );
+  }
 
   return (
-    <div
-      style={{ left: position.x, top: position.y }}
-      className="fixed z-50 w-56 max-h-[60dvh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-xl shadow-2xl py-1 text-xs text-slate-200 divide-y divide-slate-800/80 animate-fade-in"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {isFolder ? (
+    <WinUIFlyout anchor={anchor} label={node ? 'Divider actions' : 'Library actions'} onClose={onClose}>
+      <MenuItem icon={<Plus />} onClick={() => onAddCard(id)}>Add cards</MenuItem>
+      <MenuItem icon={<Plus />} onClick={() => onAddDivider(id)}>Add new divider</MenuItem>
+      <MenuDivider />
+      <MenuItem icon={<RefreshCw />} onClick={() => onReviseDivider(node)}>
+        {node ? 'Revise cards' : 'Revise all cards (cram)'}
+      </MenuItem>
+      <MenuDivider />
+      <Submenu label="File operations" icon={<Folder />}>
+        <MenuItem icon={<ArrowDownToLine />} onClick={() => onOpenImport(id, 'divider')}>Import divider</MenuItem>
+        <MenuItem icon={<ArrowDownToLine />} onClick={() => onOpenImport(id, 'contents')}>Import contents of divider</MenuItem>
+        <MenuItem icon={<ArrowUpFromLine />} onClick={() => onExportDivider(id ?? '')}>
+          {node ? 'Export divider' : 'Export all dividers'}
+        </MenuItem>
+      </Submenu>
+      <Menu hasIcons hasCheckmarks={!!node} checkedValues={{ progress: node?.divider?.isProgressShown ? ['show'] : [] }}
+        hoverDelay={200} positioning={{ overflowBoundaryPadding: 6 }}>
+        <MenuTrigger disableButtonEnhancement>
+          <MenuItem icon={<Shuffle />}>Manage contents</MenuItem>
+        </MenuTrigger>
+        <MenuPopover className="winui-flyout">
+          <MenuList aria-label="Manage contents">
+            {node && (
+              <MenuItemCheckbox icon={<ChartNoAxesCombined />} name="progress" value="show" onClick={() => onToggleProgress(node.id)}>
+                Show learning progress
+              </MenuItemCheckbox>
+            )}
+            <MenuItem icon={<Undo2 />} onClick={() => onResetWeights(id, false)}>Reset card weights</MenuItem>
+            <MenuItem icon={<Undo2 />} onClick={() => onResetWeights(id, true)}>Reset card weights (recursive)</MenuItem>
+            <MenuItem icon={<ArrowDownAZ />} onClick={() => onSortNodes(false, id)}>Sort contents alphabetically</MenuItem>
+            <MenuItem icon={<ArrowDownAZ />} onClick={() => onSortNodes(true, id)}>Sort contents alphabetically (recursive)</MenuItem>
+          </MenuList>
+        </MenuPopover>
+      </Menu>
+      {node && (
         <>
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onAddCard(node.id);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <FilePlus size={14} style={{ color: 'var(--color-card-icon, #818cf8)' }} />
-              <span>Add cards</span>
-            </button>
-            <button
-              onClick={() => {
-                onAddDivider(node.id);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
-              <span>Add new divider</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onReviseDivider(node);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-purple-300 font-semibold"
-            >
-              <RefreshCw size={14} />
-              <span>Revise deck</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <button
-              role="menuitemcheckbox"
-              aria-checked={!!node.divider?.isProgressShown}
-              onClick={() => {
-                onToggleProgress(node.id);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800"
-            >
-              {node.divider?.isProgressShown ? '✓ ' : ''}Show learning progress
-            </button>
-            {[false, true].map((recursive) => (
-              <button key={String(recursive)} onClick={() => {
-                onSortNodes(recursive, node.id);
-                onClose();
-              }} className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2">
-                <ArrowUpDown size={14} /> Sort contents{recursive ? ' (recursive)' : ''}
-              </button>
-            ))}
-          </div>
-
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onResetWeights(node.id, false);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <RotateCcw size={14} className="text-slate-400" />
-              <span>Reset card weights</span>
-            </button>
-            <button
-              onClick={() => {
-                onResetWeights(node.id, true);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <RotateCcw size={14} className="text-slate-400" />
-              <span>Reset weights (recursive)</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onStartRename(node);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <Edit size={14} />
-              <span>Rename divider</span>
-            </button>
-            <button
-              onClick={() => {
-                onDeleteNode(node.id);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-rose-400"
-            >
-              <Trash size={14} />
-              <span>Delete divider</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            {(['divider', 'contents'] as const).map((mode) => (
-              <button key={mode} onClick={() => {
-                onOpenImport(node.id, mode);
-                onClose();
-              }} className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-2">
-                <Upload size={14} /> Import {mode === 'divider' ? 'divider' : 'divider contents'}
-              </button>
-            ))}
-            <button
-              onClick={() => {
-                onExportDivider(node.id);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <Download size={14} />
-              <span>Export divider</span>
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onEditCard(node);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <Edit size={14} className="text-indigo-400" />
-              <span>Edit card</span>
-            </button>
-            <button
-              onClick={() => {
-                onStartRename(node);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <Edit size={14} />
-              <span>Rename card</span>
-            </button>
-          </div>
-
-          <div className="py-1">
-            <button
-              onClick={() => {
-                onResetWeights(node.id, false);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2"
-            >
-              <RotateCcw size={14} className="text-indigo-400" />
-              <span>Reset card weight</span>
-            </button>
-            <button
-              onClick={() => {
-                onDeleteNode(node.id);
-                onClose();
-              }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-rose-400"
-            >
-              <Trash size={14} />
-              <span>Delete card</span>
-            </button>
-          </div>
+          <MenuDivider />
+          <MenuItem icon={<Pencil />} onClick={() => onStartRename(node)}>Rename divider</MenuItem>
+          <MenuItem className="winui-danger" icon={<Trash2 />} onClick={() => onDeleteNode(node.id)}>Delete divider</MenuItem>
         </>
       )}
-    </div>
+    </WinUIFlyout>
   );
-};
+}

@@ -1,19 +1,19 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Input } from '@fluentui/react-components';
 import {
-  Search,
   MoreVertical,
   FilePlus,
   FolderPlus,
   RefreshCw,
-  X,
 } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
 import { TreeNode, XamlTreeViewProps } from './tree/types';
 import { TreeNodeItem } from './tree/TreeNodeItem';
 import { TreeSearchResults } from './tree/TreeSearchResults';
-import { TreeRootContextMenu } from './tree/TreeRootContextMenu';
+import { TreeNodeContextMenu } from './tree/TreeNodeContextMenu';
+import type { FlyoutAnchor } from './WinUIFlyout';
 
 export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   nodes,
@@ -38,7 +38,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
   const [expansionOverrides, setExpandedFolderIds] = useState<Record<string, boolean>>({});
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
-  const [activeMenuNodeId, setActiveMenuNodeId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ node: TreeNode | null; anchor: FlyoutAnchor } | null>(null);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: 'before' | 'after' | 'into' } | null>(null);
 
@@ -48,20 +48,6 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     importTarget.current = { id, mode };
     fileInput.current?.click();
   };
-
-  // Root Context Menu Flyout State
-  const [isRootMenuOpen, setIsRootMenuOpen] = useState<boolean>(false);
-  const [rootMenuPos, setRootMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  // Dismiss context flyouts on click outside
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setActiveMenuNodeId(null);
-      setIsRootMenuOpen(false);
-    };
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, []);
 
   // Build hierarchical tree with recursive card counts
   const treeData = useMemo(() => {
@@ -153,7 +139,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const targetTag = target?.tagName?.toLowerCase();
-      if (targetTag === 'input' || targetTag === 'textarea' || editingNodeId) {
+      if (e.defaultPrevented || menu || target?.closest('[role="menu"]') || targetTag === 'input' || targetTag === 'textarea' || editingNodeId) {
         return;
       }
 
@@ -199,12 +185,17 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [visibleNodes, selectedNodeId, expandedFolderIds, editingNodeId, onSelectNode, nodes]);
+  }, [visibleNodes, selectedNodeId, expandedFolderIds, editingNodeId, onSelectNode, nodes, menu]);
 
   const handleStartRename = (node: NodeData) => {
     setEditingNodeId(node.id);
     setEditingName(node.card?.front ?? node.name);
-    setActiveMenuNodeId(null);
+    setMenu(null);
+  };
+
+  const addDivider = (parentId: string | null) => {
+    if (parentId) setExpandedFolderIds((previous) => ({ ...previous, [parentId]: true }));
+    handleStartRename(onAddDivider(parentId));
   };
 
   const handleSaveRename = (node: NodeData) => {
@@ -280,45 +271,38 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
 
   return (
     <div
-      onContextMenu={(e) => {
-        e.preventDefault();
-        setActiveMenuNodeId(null);
-        setRootMenuPos({
-          x: Math.min(e.clientX, window.innerWidth - 240),
-          y: Math.min(e.clientY, window.innerHeight - 300),
-        });
-        setIsRootMenuOpen(true);
-      }}
-      className="bg-slate-900/90 border-r border-slate-800 h-full flex flex-col shrink-0 select-none relative w-full md:w-[var(--sidebar-width)]"
+      className="winui-tree-pane"
       style={{ '--sidebar-width': `${width}px` } as React.CSSProperties}
     >
-      {/* Search Input Bar */}
-      <div className="p-2 border-b border-slate-800/80" onClick={(e) => e.stopPropagation()}>
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search flashcards..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-2 sm:py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-          />
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
-              title="Clear search"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
+      <div className="winui-tree-search">
+        <Input
+          type="search"
+          size="small"
+          value={searchQuery}
+          onChange={(_, data) => setSearchQuery(data.value)}
+          placeholder="Search"
+          aria-label="Search flashcards"
+          className="winui-search-control"
+        />
       </div>
 
-      {/* Main Tree Viewport */}
       <div
-        className="flex-1 overflow-y-auto p-1.5 space-y-0.5 touch-pan-y"
-        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+        className="winui-tree-viewport"
+        tabIndex={treeData.length ? -1 : 0}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+            event.preventDefault();
+            const { left, top } = event.currentTarget.getBoundingClientRect();
+            setMenu({ node: null, anchor: { x: left + 8, y: top + 8, source: event.currentTarget } });
+          }
+        }}
+        onContextMenu={(event) => {
+          if (event.target instanceof HTMLElement && event.target.closest('input')) return;
+          event.preventDefault();
+          setMenu({ node: null, anchor: { x: event.clientX, y: event.clientY, source: event.currentTarget } });
+        }}
+        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}
         onDrop={handleRootDrop}
       >
         {searchQuery.trim() ? (
@@ -345,7 +329,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               expandedFolderIds={expandedFolderIds}
               editingNodeId={editingNodeId}
               editingName={editingName}
-              activeMenuNodeId={activeMenuNodeId}
+              activeMenuNodeId={menu?.node?.id ?? null}
               dropTarget={dropTarget}
               onSelectNode={onSelectNode}
               onToggleFolder={toggleFolder}
@@ -353,25 +337,12 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
               onSaveRename={handleSaveRename}
               onCancelRename={() => setEditingNodeId(null)}
               onEditingNameChange={setEditingName}
-              onOpenMenu={(id) => {
-                setIsRootMenuOpen(false);
-                setActiveMenuNodeId(id);
-              }}
-              onCloseMenu={() => setActiveMenuNodeId(null)}
+              onOpenMenu={(node, anchor) => setMenu({ node, anchor })}
+              onCloseMenu={() => setMenu(null)}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onAddCard={onAddCard}
-              onAddDivider={onAddDivider}
-              onReviseDivider={onReviseDivider}
-              onEditCard={onEditCard}
-              onDeleteNode={onDeleteNode}
-              onResetWeights={onResetWeights}
-              onExportDivider={onExportDivider}
-              onToggleProgress={onToggleProgress}
-              onOpenImport={openImport}
-              onSortNodes={onSortNodes}
             />
           ))
         )}
@@ -393,7 +364,7 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
           <span>+ Card</span>
         </button>
         <button
-          onClick={() => onAddDivider(null)}
+          onClick={() => addDivider(null)}
           className="flex-1 py-2 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center justify-center space-x-1 border border-slate-700 touch-manipulation"
         >
           <FolderPlus size={14} style={{ color: 'var(--color-folder-icon, #f59e0b)' }} />
@@ -409,8 +380,10 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setRootMenuPos({ x: 20, y: Math.max(80, window.innerHeight - 340) });
-            setIsRootMenuOpen(!isRootMenuOpen);
+            const { left, top } = e.currentTarget.getBoundingClientRect();
+            setMenu(menu && !menu.node ? null : {
+              node: null, anchor: { x: left, y: top, source: e.currentTarget },
+            });
           }}
           className="py-2 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center justify-center border border-slate-700 touch-manipulation"
           title="Decks & Library Actions"
@@ -427,16 +400,24 @@ export const XamlTreeView: React.FC<XamlTreeViewProps> = ({
         onChange={(event) => onImportDivider(event, importTarget.current.id, importTarget.current.mode)}
       />
 
-      {/* Root Context Menu */}
-      {isRootMenuOpen && (
-        <TreeRootContextMenu
-          position={rootMenuPos}
-          onClose={() => setIsRootMenuOpen(false)}
-          onAddCard={onAddCard}
-          onAddDivider={onAddDivider}
-          onReviseDivider={() => onReviseDivider(null)}
+      {menu && (
+        <TreeNodeContextMenu
+          key={menu.node?.id ?? 'root'}
+          node={menu.node}
+          anchor={menu.anchor}
+          onClose={() => setMenu(null)}
+          onAddCard={(id) => {
+            if (id) setExpandedFolderIds((previous) => ({ ...previous, [id]: true }));
+            onAddCard(id);
+          }}
+          onAddDivider={addDivider}
+          onReviseDivider={onReviseDivider}
+          onEditCard={onEditCard}
+          onStartRename={handleStartRename}
+          onDeleteNode={onDeleteNode}
           onSortNodes={onSortNodes}
           onOpenImport={openImport}
+          onToggleProgress={onToggleProgress}
           onResetWeights={onResetWeights}
           onExportDivider={onExportDivider}
         />

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, RefreshCw } from 'lucide-react';
+import { Button } from '@fluentui/react-components';
 import { NodeData } from '../types/flashcard';
 import {
   CardSettingsData,
@@ -24,7 +24,7 @@ interface XamlRevisionPageProps {
   cardSettings: CardSettingsData;
   difficultySettings?: DifficultySettingsData;
   onUpdateCard: (updatedNode: NodeData) => void;
-  onGoToFlashcardsPage: () => void;
+  hasSelection: boolean;
 }
 
 export function XamlRevisionPage({
@@ -33,7 +33,7 @@ export function XamlRevisionPage({
   cardSettings,
   difficultySettings = DEFAULT_DIFFICULTY_SETTINGS,
   onUpdateCard,
-  onGoToFlashcardsPage,
+  hasSelection,
 }: XamlRevisionPageProps) {
   const { accessToken } = useSync();
   const { nodes } = useLibrary();
@@ -116,76 +116,61 @@ export function XamlRevisionPage({
 
   if (!current?.card) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4 text-center">
-        <h2 className="text-xl text-slate-200">
-          {cardsToRevise.length ? 'All done!' : 'No cards to revise'}
-        </h2>
-        <p className="text-sm text-slate-400">
-          {cardsToRevise.length
-            ? 'No more cards are ready to revise. Come back later.'
-            : 'Create cards or import a deck to begin revising.'}
+      <div className="winui-empty-state winui-revision-message">
+        <h2>{hasSelection ? 'All done!' : 'No divider selected'}</h2>
+        <p>
+          {hasSelection
+            ? 'No more cards left to revise! Come again later.'
+            : 'Go back to the Flashcards page (the bookshelf icon), right-click a divider (folder) and select “Revise cards”.'}
         </p>
-        <button onClick={onGoToFlashcardsPage} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm flex items-center gap-2">
-          Go to Flashcards <ArrowRight size={14} />
-        </button>
       </div>
     );
   }
 
+  if (editing) {
+    const card = current.card;
+    return (
+      <XamlCardEditControl
+        cardNode={current}
+        dividerPath={getDividerPath(nodes, current.parentId)}
+        onSave={(front, back) => {
+          onUpdateCard({
+            ...current,
+            name: front.slice(0, 35).replace(/[#*`]/g, '') || current.name,
+            updatedAt: new Date().toISOString(),
+            card: { ...card, front, back },
+          });
+          setEditing(false);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="flex-1 min-w-0 h-full flex flex-col items-center overflow-hidden p-3 sm:p-6">
-      <div className="self-start flex items-center gap-2 px-3 py-1 rounded-md bg-slate-900 border border-slate-800 text-xs text-slate-300">
-        <RefreshCw size={12} className="text-purple-400" />
-        {deckName}
-      </div>
-      <div className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
-        {editing ? (
-          <XamlCardEditControl
-            key={current.id}
-            cardNode={current}
-            dividerPath={getDividerPath(nodes, current.parentId)}
-            onSave={(front, back) => {
-              onUpdateCard({
-                ...current,
-                name: front.slice(0, 35).replace(/[#*`]/g, '') || current.name,
-                updatedAt: new Date().toISOString(),
-                card: { ...current.card!, front, back },
-              });
-              setEditing(false);
-            }}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <XamlCardControl
-            key={current.id}
-            cardNode={current}
-            isFlipped={isFlipped}
-            onFlip={() => setIsFlipped((previous) => !previous)}
-            onStartEditing={() => setEditing(true)}
-            isEditButtonVisible={isFlipped}
-            showFooterHint={false}
-            cardSettings={cardSettings}
-          />
-        )}
-      </div>
-      {!editing && (isFlipped ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 w-full max-w-xl shrink-0 pb-safe">
-          {REVISION_RATINGS.map(({ name, key, color, delay }, index) => (
-            <button
-              key={key}
-              onClick={() => rate(index)}
-              title={`Press ${key}`}
-              className="min-h-12 px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-sm font-semibold flex flex-col items-center justify-center"
-              style={{ color }}
-            >
-              {name}
-              <span className="text-xs font-normal">{formatRevisionDelay(difficultySettings[delay])}</span>
-            </button>
-          ))}
+    <div className="winui-revision">
+      <XamlCardControl
+        key={current.id}
+        cardNode={current}
+        isFlipped={isFlipped}
+        onFlip={() => setIsFlipped((previous) => !previous)}
+        onStartEditing={() => setEditing(true)}
+        isEditButtonVisible={isFlipped}
+        focusOnMount
+        cardSettings={cardSettings}
+      />
+      {isFlipped && (
+        <div className="winui-revision-ratings pb-safe" aria-label="Rate this card">
+          {REVISION_RATINGS.map(({ name, key, color, delay }, index) => {
+            const delayText = formatRevisionDelay(difficultySettings[delay]);
+            return (
+              <Button key={key} onClick={() => rate(index)} title={`Press ${key}`} style={{ color }}>
+                {name}
+                {delayText && <span>{delayText}</span>}
+              </Button>
+            );
+          })}
         </div>
-      ) : (
-        <p className="text-xs text-slate-400 py-1">Tap the card or press Space to reveal the answer</p>
-      ))}
+      )}
     </div>
   );
 }

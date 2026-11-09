@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Edit, RotateCcw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Button, ProgressBar } from '@fluentui/react-components';
+import { RotateCcw } from 'lucide-react';
 import { NodeData } from '../types/flashcard';
 import { CardSettingsData, DEFAULT_CARD_SETTINGS } from '../types/cardSettings';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AutoFitViewbox } from './AutoFitViewbox';
+import { useSettings } from '../context/SettingsContext';
 
 interface XamlCardControlProps {
   cardNode: NodeData | null;
@@ -14,179 +15,112 @@ interface XamlCardControlProps {
   onFlip: () => void;
   onStartEditing?: () => void;
   isEditButtonVisible?: boolean;
-  showProgressBar?: boolean;
-  showFooterHint?: boolean;
+  focusOnMount?: boolean;
   cardSettings?: CardSettingsData;
 }
 
-export const XamlCardControl: React.FC<XamlCardControlProps> = ({
+export function XamlCardControl({
   cardNode,
   isFlipped,
   onFlip,
   onStartEditing,
   isEditButtonVisible = true,
-  showProgressBar = true,
-  showFooterHint = true,
+  focusOnMount = false,
   cardSettings = DEFAULT_CARD_SETTINGS,
-}) => {
-  const [scale, setScale] = useState<number>(1.0);
-  const containerRef = useRef<HTMLDivElement>(null);
+}: XamlCardControlProps) {
+  const { uiSettings } = useSettings();
+  const [scale, setScale] = useState(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const card = cardNode?.card;
 
-  // Global Keyboard Accelerators matching WinUI CardControl.xaml
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName.toLowerCase();
-      if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey ||
-          activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
-      if (e.target instanceof HTMLElement && e.target.closest('button, a, [contenteditable]')) return;
+    if (focusOnMount) cardRef.current?.focus();
+  }, [focusOnMount]);
 
-      if (!cardNode || !cardNode.card) return;
+  useEffect(() => {
+    if (!card) return;
 
-      if (e.code === 'Space' || e.code === 'Enter') {
-        e.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLElement &&
+          event.target.closest('input, textarea, select, button, a, [contenteditable], [role="menu"]')) return;
+
+      if (event.code === 'Space' || event.code === 'Enter') {
+        event.preventDefault();
         onFlip();
-      } else if (e.key.toLowerCase() === 'e') {
-        if (isEditButtonVisible && onStartEditing) {
-          e.preventDefault();
-          onStartEditing();
-        }
+      } else if (event.key.toLowerCase() === 'e' && isEditButtonVisible && onStartEditing) {
+        event.preventDefault();
+        onStartEditing();
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cardNode, onFlip, onStartEditing, isEditButtonVisible]);
+  }, [card, onFlip, onStartEditing, isEditButtonVisible]);
 
-  // Handle Non-Passive Native Mouse Wheel Zooming
   useEffect(() => {
-    const containerEl = containerRef.current;
-    if (!containerEl) return;
+    const viewport = viewportRef.current;
+    if (!viewport || !card) return;
 
-    const handleNativeWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const delta = e.deltaY < 0 ? 0.08 : -0.08;
-      setScale((prev) => Math.min(2.5, Math.max(0.4, Number((prev + delta).toFixed(2)))));
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return;
+      event.preventDefault();
+      const delta = event.deltaY < 0 ? 0.08 : -0.08;
+      setScale((previous) => Math.min(2.5, Math.max(0.4, Number((previous + delta).toFixed(2)))));
     };
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', handleWheel);
+  }, [card]);
 
-    containerEl.addEventListener('wheel', handleNativeWheel, { passive: false });
-    return () => {
-      containerEl.removeEventListener('wheel', handleNativeWheel);
-    };
-  }, [cardNode]);
+  if (!card) return <div className="winui-empty-state">No card selected</div>;
 
-  if (!cardNode || !cardNode.card) {
-    return (
-      <div className="flex-1 h-full flex flex-col items-center justify-center p-6 text-center text-slate-500 select-none">
-        <h2 className="text-lg sm:text-xl font-light text-slate-400">No card selected</h2>
-        <p className="text-xs text-slate-500 mt-1 max-w-xs">Select a card from the deck list or tap + Card to create one.</p>
-      </div>
-    );
-  }
-
-  const card = cardNode.card;
-
-  // 1:1 WinUI CardViewModel.cs WeightPercentage calculation formula:
-  const maxW = cardSettings?.maximumWeight ?? 30.0;
-  const minW = cardSettings?.minimumWeight ?? 1.0;
-  const rawWeight = typeof card.weight === 'number' ? card.weight : (cardSettings?.defaultWeight ?? 20.0);
-
-  const weightPercent = maxW === minW ? 0 : Math.min(
-    100,
-    Math.max(0, Math.round(((maxW - rawWeight) / (maxW - minW)) * 100))
-  );
+  const { minimumWeight, maximumWeight } = cardSettings;
+  const weightPercent = maximumWeight === minimumWeight ? 0 : Math.min(100, Math.max(
+    0, (maximumWeight - card.weight) / (maximumWeight - minimumWeight) * 100,
+  ));
+  const answerSize = ([ [50, 32], [100, 28], [200, 24], [350, 20], [600, 18], [1000, 16], [1500, 14] ]
+    .find(([length]) => card.back.length < length)?.[1]) ?? 12;
 
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 h-full p-3 sm:p-6 flex flex-col justify-between items-center relative select-none overflow-hidden bg-transparent"
-    >
-      {/* Top Header: Progress Bar & Edit (e) / Zoom Control Buttons */}
-      <div className="w-full flex items-center justify-between z-10 min-h-[36px] sm:min-h-[40px] bg-transparent">
-        {showProgressBar ? (
-          <div className="flex flex-col items-start space-y-0.5 sm:space-y-1 bg-transparent" title={`Learning progress: ${weightPercent}% (Weight: ${rawWeight})`}>
-            <div className="flex items-center space-x-1.5">
-              <span className="text-[11px] sm:text-xs text-slate-400 font-medium">Progress</span>
-              <span className="text-[10px] font-mono text-slate-500">({weightPercent}%)</span>
-            </div>
-            <div className="w-24 sm:w-36 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
-              <div
-                className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${weightPercent}%` }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div />
-        )}
-
-        {/* Right side controls: Zoom indicator & Edit button */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2 bg-transparent">
-          {scale !== 1.0 && (
-            <button
-              onClick={() => setScale(1.0)}
-              className="px-2 py-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-xs rounded-md border border-indigo-500/40 flex items-center space-x-1 transition-colors"
-              title="Reset Zoom to 100%"
-            >
-              <RotateCcw size={12} />
-              <span className="font-mono text-[10px] sm:text-[11px]">{Math.round(scale * 100)}%</span>
-            </button>
+    <div className="winui-card-view">
+      <div className="winui-card-header">
+        <div className="winui-card-progress" title={uiSettings.showTooltips ? `Learning progress: ${Math.round(weightPercent)}%` : undefined}>
+          {uiSettings.showTooltips && <span>Learning progress</span>}
+          <ProgressBar value={weightPercent} max={100} aria-label="Learning progress" />
+        </div>
+        <div className="winui-card-actions">
+          {scale !== 1 && (
+            <Button size="small" onClick={() => setScale(1)} icon={<RotateCcw size={14} />} title="Reset zoom">
+              {Math.round(scale * 100)}%
+            </Button>
           )}
-
           {isEditButtonVisible && onStartEditing && (
-            <button
-              onClick={onStartEditing}
-              className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-md transition-colors border border-slate-700 flex items-center space-x-1.5 shadow-sm touch-manipulation"
-            >
-              <Edit size={13} className="text-indigo-400" />
-              <span>Edit</span>
-              <span className="text-slate-400 font-mono text-[10px] hidden sm:inline">(e)</span>
-            </button>
+            <Button size="small" onClick={onStartEditing}>Edit <span className="font-light">(e)</span></Button>
           )}
         </div>
       </div>
-
-      {/* Center Responsive Card (with Zoom Scale & Flip 3D) */}
-      <div className="w-full my-auto perspective-1000 flex flex-col items-center justify-center px-1 sm:px-4 py-2 bg-transparent overflow-hidden flex-1 min-h-0">
-        <motion.div
-          onClick={onFlip}
-          className="w-full max-w-[550px] min-h-[240px] sm:min-h-[325px] aspect-[550/325] cursor-pointer rounded-xl bg-slate-900 border border-slate-800 shadow-2xl relative flex flex-col justify-center items-center p-4 sm:p-6 backdrop-blur-xl overflow-hidden origin-center"
-          style={{ transformStyle: 'preserve-3d' }}
-          animate={{
-            scale,
-            rotateX: isFlipped ? 180 : 0,
+      <div className="winui-card-stage" ref={viewportRef}>
+        <div
+          ref={cardRef}
+          role="button"
+          tabIndex={0}
+          aria-label={isFlipped ? 'Show question' : 'Reveal answer'}
+          className="winui-flashcard"
+          data-flipped={isFlipped}
+          style={{ transform: `scale(${scale})`, maxWidth: uiSettings.maxCardWidth }}
+          onClick={(event) => {
+            if (event.target instanceof HTMLElement && event.target.closest('a')) return;
+            cardRef.current?.focus();
+            onFlip();
           }}
-          transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         >
-          {!isFlipped ? (
-            /* Front side with 2D auto-fitting scale filling the card */
-            <div className="w-full h-full flex items-center justify-center p-2">
-              <AutoFitViewbox maxWidth={480} maxHeight={275} allowUpscale={true} maxScale={2.0}>
-                <div className="text-slate-100 font-medium text-center select-text w-full max-w-[460px] text-2xl sm:text-3xl leading-snug">
-                  <MarkdownRenderer content={card.front || 'Null'} />
-                </div>
-              </AutoFitViewbox>
+          <AutoFitViewbox maxWidth={450} maxHeight={268} allowUpscale={false}>
+            <div className="w-full break-words" style={{ fontSize: isFlipped ? answerSize : 30 }}>
+              <MarkdownRenderer className="winui-card-markdown" content={(isFlipped ? card.back : card.front) || 'Null'} />
             </div>
-          ) : (
-            /* Back side rendered upside down so it flips right-side-up with auto-fitting scale */
-            <div className="w-full h-full flex items-center justify-center [transform:rotateX(180deg)] p-2">
-              <AutoFitViewbox maxWidth={480} maxHeight={275} allowUpscale={true} maxScale={1.8}>
-                <div className="text-slate-100 font-normal text-center select-text w-full max-w-[460px] text-lg sm:text-xl leading-relaxed">
-                  <MarkdownRenderer content={card.back || 'Null'} />
-                </div>
-              </AutoFitViewbox>
-            </div>
-          )}
-        </motion.div>
-      </div>
-
-      {/* Bottom Footer Hint */}
-      {showFooterHint && (
-        <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium z-10 flex items-center space-x-1 shrink-0 bg-transparent">
-          <span>Tap card or press <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-400 font-mono text-[9px] sm:text-[10px]">Space</kbd> to flip</span>
+          </AutoFitViewbox>
         </div>
-      )}
+      </div>
     </div>
   );
-};
+}

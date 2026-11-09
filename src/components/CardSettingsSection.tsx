@@ -1,12 +1,10 @@
 'use client';
 
-import React from 'react';
-import { Sliders, RotateCcw, Flame, Clock } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Accordion, AccordionHeader, AccordionItem, AccordionPanel, Button, SpinButton, type SpinButtonProps } from '@fluentui/react-components';
+import { Layers, SlidersHorizontal } from 'lucide-react';
 import {
-  CardSettingsData,
-  DifficultySettingsData,
-  calculateDaysToForget,
-  REVISION_RATINGS,
+  CardSettingsData, DifficultySettingsData, calculateDaysToForget, REVISION_RATINGS,
 } from '../types/cardSettings';
 
 interface CardSettingsSectionProps {
@@ -16,6 +14,19 @@ interface CardSettingsSectionProps {
   onUpdateDifficultySettings: (newSettings: DifficultySettingsData) => void;
   onResetCardSettings: () => void;
   onResetDifficultySettings: () => void;
+}
+
+function NumberBox({ onValue, ...props }: Omit<SpinButtonProps, 'onChange'> & { onValue: (value: number) => void }) {
+  return (
+    <SpinButton
+      step={0.1}
+      {...props}
+      onChange={(_, data) => {
+        const value = data.value ?? Number(data.displayValue);
+        if (Number.isFinite(value)) onValue(value);
+      }}
+    />
+  );
 }
 
 export function DurationInput({ minutes, label, onChange }: {
@@ -29,244 +40,122 @@ export function DurationInput({ minutes, label, onChange }: {
     { name: 'Minutes', size: 1, limit: 59, value: minutes % 60 },
   ];
   return (
-    <div role="group" aria-label={label} className="grid grid-cols-3 gap-1">
+    <div role="group" aria-label={label} className="winui-duration-input">
       {units.map(({ name, size, limit, value }) => (
-        <label key={name} className="text-xs text-slate-400">
-          {name}
-          <input
-            type="number"
-            min="0"
-            max={limit}
+        <div key={name}>
+          <span>{name}</span>
+          <NumberBox
+            aria-label={name}
             value={value}
-            onChange={(event) => {
-              const next = Math.max(0, Math.min(limit, Math.round(event.target.valueAsNumber || 0)));
-              onChange(minutes + (next - value) * size);
+            min={0}
+            max={limit}
+            step={1}
+            onValue={(next) => {
+              const clamped = Math.max(0, Math.min(limit, Math.round(next)));
+              onChange(minutes + (clamped - value) * size);
             }}
-            className="mt-1 w-full min-w-0 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-200"
           />
-        </label>
+        </div>
       ))}
     </div>
   );
 }
 
-export const CardSettingsSection: React.FC<CardSettingsSectionProps> = ({
-  cardSettings,
-  difficultySettings,
-  onUpdateCardSettings,
-  onUpdateDifficultySettings,
-  onResetCardSettings,
-  onResetDifficultySettings,
-}) => {
-  const daysToForget = calculateDaysToForget(
-    cardSettings.minimumWeight,
-    cardSettings.maximumWeight,
-    cardSettings.decayWeight,
-    cardSettings.decayDurationHours
-  );
-
+function SettingsRow({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <div className="space-y-6 select-none">
-      {/* 1. Difficulty Delta Weights */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center space-x-2">
-            <Sliders size={18} className="text-purple-400" />
-            <div>
-              <h3 className="text-sm font-bold text-slate-100">Revision Difficulty</h3>
-              <p className="text-xs text-slate-400">
-                Set the weight change and time before a card can reappear for each rating.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onResetDifficultySettings}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 flex items-center space-x-1.5"
-          >
-            <RotateCcw size={13} />
-            <span>Reset to default</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {REVISION_RATINGS.map(({ name, color, weight, delay }) => (
-            <fieldset key={name} className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
-              <legend className="px-1 text-xs font-semibold" style={{ color }}>{name}</legend>
-              <label className="flex items-center justify-between gap-2 text-xs text-slate-300">
-                Weight change
-                <input
-                  type="number"
-                  step="0.01"
-                  value={difficultySettings[weight]}
-                  onChange={(e) => onUpdateDifficultySettings({
-                    ...difficultySettings,
-                    [weight]: e.target.valueAsNumber || 0,
-                  })}
-                  className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right"
-                />
-              </label>
-              <div className="space-y-1">
-                <p className="text-xs text-slate-300">Hide card for</p>
-                <DurationInput
-                  label={`${name} delay`}
-                  minutes={difficultySettings[delay]}
-                  onChange={(minutes) => onUpdateDifficultySettings({ ...difficultySettings, [delay]: minutes })}
-                />
-              </div>
-            </fieldset>
-          ))}
-        </div>
+    <div className="winui-expander-row">
+      <div>
+        <div>{title}</div>
+        {description && <p>{description}</p>}
       </div>
-
-      {/* 2. Card Settings & Decay Parameters */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center space-x-2">
-            <Flame size={18} className="text-amber-400" />
-            <div>
-              <h3 className="text-sm font-bold text-slate-100">Card Weight & Decay Settings</h3>
-              <p className="text-xs text-slate-400">
-                Default weight for new cards, boundaries, and automatic weight decay rate over time.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onResetCardSettings}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 flex items-center space-x-1.5"
-          >
-            <RotateCcw size={13} />
-            <span>Reset to default</span>
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {/* Default Weight */}
-          <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg p-3">
-            <div>
-              <h4 className="text-xs font-semibold text-slate-200">Default card weight for new cards</h4>
-              <p className="text-[11px] text-slate-400">Default initial weight assigned when creating new flashcards (WinUI default is 20.0)</p>
-            </div>
-            <input
-              type="number"
-              step="0.5"
-              min={cardSettings.minimumWeight}
-              max={cardSettings.maximumWeight}
-              value={cardSettings.defaultWeight}
-              onChange={(e) =>
-                onUpdateCardSettings({
-                  ...cardSettings,
-                  defaultWeight: Math.min(cardSettings.maximumWeight, Math.max(
-                    cardSettings.minimumWeight, e.target.valueAsNumber || cardSettings.minimumWeight
-                  )),
-                })
-              }
-              className="w-24 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          {/* Min & Max Weight */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg p-3">
-              <div>
-                <h4 className="text-xs font-semibold text-slate-200">Minimum card weight</h4>
-                <p className="text-[11px] text-slate-400">Lower bound for cards (WinUI default is 1.0)</p>
-              </div>
-              <input
-                type="number"
-                step="0.5"
-                min="0.1"
-                value={cardSettings.minimumWeight}
-                onChange={(event) => {
-                  const minimumWeight = Math.max(0.1, Math.min(cardSettings.maximumWeight, event.target.valueAsNumber || 0.1));
-                  onUpdateCardSettings({
-                    ...cardSettings,
-                    minimumWeight,
-                    defaultWeight: Math.max(minimumWeight, cardSettings.defaultWeight),
-                  });
-                }}
-                className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg p-3">
-              <div>
-                <h4 className="text-xs font-semibold text-slate-200">Maximum card weight</h4>
-                <p className="text-[11px] text-slate-400">Upper bound for cards (WinUI default is 30.0)</p>
-              </div>
-              <input
-                type="number"
-                step="0.5"
-                min={cardSettings.minimumWeight}
-                value={cardSettings.maximumWeight}
-                onChange={(event) => {
-                  const maximumWeight = Math.max(cardSettings.minimumWeight, event.target.valueAsNumber || cardSettings.minimumWeight);
-                  onUpdateCardSettings({
-                    ...cardSettings,
-                    maximumWeight,
-                    defaultWeight: Math.min(maximumWeight, cardSettings.defaultWeight),
-                    decayWeight: Math.min(maximumWeight, cardSettings.decayWeight),
-                  });
-                }}
-                className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-right font-mono text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Decay Amount & Days to Forget Calculation */}
-          <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="text-xs font-semibold text-slate-200">Card weight decay amount</h4>
-                <p className="text-[11px] text-slate-400">
-                  How much every card’s weight increases by when the duration elapses.
-                </p>
-              </div>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                value={cardSettings.decayWeight}
-                onChange={(e) =>
-                  onUpdateCardSettings({
-                    ...cardSettings,
-                    decayWeight: Math.max(0, Math.min(cardSettings.maximumWeight, e.target.valueAsNumber || 0)),
-                    lastDecayTime: null,
-                  })
-                }
-                className="w-24 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-right font-mono text-xs text-amber-300 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            {/* WinUI 3 Days to Forget Banner */}
-            <div className="p-2.5 rounded bg-slate-900/80 border border-slate-800/80 flex items-center space-x-2 text-xs">
-              <Clock size={14} className="text-indigo-400 shrink-0" />
-              {daysToForget !== null ? (
-                <span className="text-slate-300">
-                  It will take <strong className="text-indigo-300 font-bold">{daysToForget} days</strong> to forget a memorized card.
-                </span>
-              ) : (
-                <span className="text-slate-500 italic">Decay has been disabled.</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg p-3">
-            <div>
-              <h4 className="text-xs font-semibold text-slate-200">Card weight decay interval</h4>
-              <p className="text-[11px] text-slate-400">Set all three values to zero to disable decay.</p>
-            </div>
-            <DurationInput
-              label="Card weight decay interval"
-              minutes={Math.round((cardSettings.decayDurationHours ?? 0) * 60)}
-              onChange={(minutes) => onUpdateCardSettings({
-                ...cardSettings,
-                decayDurationHours: minutes ? minutes / 60 : null,
-                lastDecayTime: null,
-              })}
-            />
-          </div>
-        </div>
-      </div>
+      {children}
     </div>
   );
-};
+}
+
+export function CardSettingsSection({
+  cardSettings, difficultySettings, onUpdateCardSettings, onUpdateDifficultySettings,
+  onResetCardSettings, onResetDifficultySettings,
+}: CardSettingsSectionProps) {
+  const { minimumWeight, maximumWeight, defaultWeight, decayWeight, decayDurationHours } = cardSettings;
+  const daysToForget = calculateDaysToForget(minimumWeight, maximumWeight, decayWeight, decayDurationHours);
+
+  return (
+    <Accordion multiple collapsible defaultOpenItems={['difficulty', 'card']} className="winui-settings-expanders">
+      <AccordionItem value="difficulty">
+        <AccordionHeader icon={<SlidersHorizontal size={20} strokeWidth={1.5} />} expandIconPosition="end">
+          <div>Difficulty weights<p>A higher card weight increases its chance of reappearing.</p></div>
+        </AccordionHeader>
+        <AccordionPanel>
+          <div className="winui-expander-reset"><Button onClick={onResetDifficultySettings}>Reset to default</Button></div>
+          {REVISION_RATINGS.map(({ name, weight, delay }) => (
+            <SettingsRow key={name} title={name}>
+              <div className="winui-rating-settings">
+                <div>
+                  <span>Weight</span>
+                  <NumberBox
+                    aria-label={`${name} weight`}
+                    value={difficultySettings[weight]}
+                    onValue={(value) => onUpdateDifficultySettings({ ...difficultySettings, [weight]: value })}
+                  />
+                </div>
+                <div>
+                  <span>Hide card for</span>
+                  <DurationInput
+                    label={`${name} delay`}
+                    minutes={difficultySettings[delay]}
+                    onChange={(minutes) => onUpdateDifficultySettings({ ...difficultySettings, [delay]: minutes })}
+                  />
+                </div>
+              </div>
+            </SettingsRow>
+          ))}
+        </AccordionPanel>
+      </AccordionItem>
+      <AccordionItem value="card">
+        <AccordionHeader icon={<Layers size={20} strokeWidth={1.5} />} expandIconPosition="end">
+          <div>Card settings<p>Set the starting weight, limits, and decay for cards.</p></div>
+        </AccordionHeader>
+        <AccordionPanel>
+          <div className="winui-expander-reset"><Button onClick={onResetCardSettings}>Reset to default</Button></div>
+          <SettingsRow title="Default card weight for new cards" description="Pick a high value that is below the maximum.">
+            <NumberBox aria-label="Default card weight for new cards" value={defaultWeight} min={minimumWeight} max={maximumWeight}
+              onValue={(value) => onUpdateCardSettings({
+                ...cardSettings, defaultWeight: Math.min(maximumWeight, Math.max(minimumWeight, value)),
+              })} />
+          </SettingsRow>
+          <SettingsRow title="Minimum card weight for new cards" description="Pick a value above 0.">
+            <NumberBox aria-label="Minimum card weight for new cards" value={minimumWeight} min={0.1} max={maximumWeight}
+              onValue={(value) => {
+                const minimum = Math.max(0.1, Math.min(maximumWeight, value));
+                onUpdateCardSettings({ ...cardSettings, minimumWeight: minimum, defaultWeight: Math.max(minimum, defaultWeight) });
+              }} />
+          </SettingsRow>
+          <SettingsRow title="Maximum card weight for new cards">
+            <NumberBox aria-label="Maximum card weight for new cards" value={maximumWeight} min={minimumWeight}
+              onValue={(value) => {
+                const maximum = Math.max(minimumWeight, value);
+                onUpdateCardSettings({
+                  ...cardSettings, maximumWeight: maximum,
+                  defaultWeight: Math.min(maximum, defaultWeight), decayWeight: Math.min(maximum, decayWeight),
+                });
+              }} />
+          </SettingsRow>
+          <SettingsRow title="Card weight decay amount" description="How much each card’s weight increases after every decay interval.">
+            <NumberBox aria-label="Card weight decay amount" value={decayWeight} min={0} max={maximumWeight}
+              onValue={(value) => onUpdateCardSettings({
+                ...cardSettings, decayWeight: Math.min(maximumWeight, Math.max(0, value)), lastDecayTime: null,
+              })} />
+          </SettingsRow>
+          <SettingsRow title="Card weight decay interval" description={daysToForget === null
+            ? 'Decay has been disabled.' : `It will take ${daysToForget} days to forget a memorized card.`}>
+            <DurationInput label="Card weight decay interval" minutes={Math.round((decayDurationHours ?? 0) * 60)}
+              onChange={(minutes) => onUpdateCardSettings({
+                ...cardSettings, decayDurationHours: minutes ? minutes / 60 : null, lastDecayTime: null,
+              })} />
+          </SettingsRow>
+        </AccordionPanel>
+      </AccordionItem>
+    </Accordion>
+  );
+}
